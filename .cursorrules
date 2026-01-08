@@ -1,0 +1,7 @@
+## Cursor Rules
+
+- Always read memory-bank core files at session start; create/update them if missing.
+- Favor mobile-first UI with large tap targets and high contrast for elderly users.
+- Keep distribution logic in pure functions to simplify Jest testing.
+- Use Italian currency formatting for display but accept both `.` and `,` as decimal separators on input.
+- Avoid destructive admin edits: gate millesimal changes behind confirmation and keep parent flow one-tap.
