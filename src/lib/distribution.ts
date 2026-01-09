@@ -67,13 +67,39 @@ function addFromTable(
   const totalValues = tableSum(table)
   if (!totalValues) return
 
-  table.entries.forEach((entry) => {
+  // Calculate unrounded shares first
+  const unroundedShares = table.entries.map((entry) => {
     const condo = condomini.find((c) => c.id === entry.condoId)
-    if (!condo) return
-    const share = roundTo2Decimals((entry.value / totalValues) * amount)
-    const row = ensureRow(rows, condo.id, condo.name)
-    row.allocations[columnId] = roundTo2Decimals((row.allocations[columnId] || 0) + share)
-    row.total = roundTo2Decimals(row.total + share)
+    if (!condo) return null
+    return {
+      condoId: condo.id,
+      condoName: condo.name,
+      share: (entry.value / totalValues) * amount,
+    }
+  }).filter((s): s is NonNullable<typeof s> => s !== null)
+
+  // Round all shares
+  const roundedShares = unroundedShares.map((s) => ({
+    ...s,
+    rounded: roundTo2Decimals(s.share),
+  }))
+
+  // Calculate total of rounded shares
+  const roundedTotal = roundedShares.reduce((sum, s) => sum + s.rounded, 0)
+  const difference = amount - roundedTotal
+
+  // If rounded total is less than target, distribute the difference to largest shares
+  if (difference > 0.001) {
+    // Sort by share size (descending) and add difference to largest
+    const sorted = [...roundedShares].sort((a, b) => b.share - a.share)
+    sorted[0].rounded = roundTo2Decimals(sorted[0].rounded + difference)
+  }
+
+  // Apply rounded shares
+  roundedShares.forEach(({ condoId, condoName, rounded }) => {
+    const row = ensureRow(rows, condoId, condoName)
+    row.allocations[columnId] = roundTo2Decimals((row.allocations[columnId] || 0) + rounded)
+    row.total = roundTo2Decimals(row.total + rounded)
   })
 }
 
@@ -105,23 +131,49 @@ export function calculateSplit(config: AppConfig, input: BillInput): SplitResult
       if (!table || !totalWeight) return
       const weightShare = t.weight / totalWeight
       const columnId = table.id
+      const allocatedAmount = roundTo2Decimals(input.amount * weightShare)
       columns.push({
         id: columnId,
         label: `${table.name} (${Math.round(weightShare * 100)}%)`,
       })
-      addFromTable(rows, table, config.condomini, columnId, roundTo2Decimals(input.amount * weightShare))
+      addFromTable(rows, table, config.condomini, columnId, allocatedAmount)
     })
   } else if (rule.kind === 'custom_percent') {
     columns.push({ id: 'percent', label: 'Percentuale' })
     const totalWeight = rule.percents.reduce((acc, p) => acc + p.weight, 0)
     if (totalWeight > 0) {
-      rule.percents.forEach((p) => {
+      // Calculate unrounded shares first
+      const unroundedShares = rule.percents.map((p) => {
         const condo = config.condomini.find((c) => c.id === p.condoId)
-        if (!condo) return
-        const share = roundTo2Decimals((p.weight / totalWeight) * input.amount)
-        const row = ensureRow(rows, condo.id, condo.name)
-        row.allocations['percent'] = roundTo2Decimals((row.allocations['percent'] || 0) + share)
-        row.total = roundTo2Decimals(row.total + share)
+        if (!condo) return null
+        return {
+          condoId: condo.id,
+          condoName: condo.name,
+          share: (p.weight / totalWeight) * input.amount,
+        }
+      }).filter((s): s is NonNullable<typeof s> => s !== null)
+
+      // Round all shares
+      const roundedShares = unroundedShares.map((s) => ({
+        ...s,
+        rounded: roundTo2Decimals(s.share),
+      }))
+
+      // Calculate total of rounded shares
+      const roundedTotal = roundedShares.reduce((sum, s) => sum + s.rounded, 0)
+      const difference = input.amount - roundedTotal
+
+      // If rounded total is less than target, distribute the difference to largest shares
+      if (difference > 0.001) {
+        const sorted = [...roundedShares].sort((a, b) => b.share - a.share)
+        sorted[0].rounded = roundTo2Decimals(sorted[0].rounded + difference)
+      }
+
+      // Apply rounded shares
+      roundedShares.forEach(({ condoId, condoName, rounded }) => {
+        const row = ensureRow(rows, condoId, condoName)
+        row.allocations['percent'] = roundTo2Decimals((row.allocations['percent'] || 0) + rounded)
+        row.total = roundTo2Decimals(row.total + rounded)
       })
     }
   }

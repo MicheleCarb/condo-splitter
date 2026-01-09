@@ -74,12 +74,56 @@ export function ResultTable({ combinedResult, hideActions = false, compact = fal
   const totalColumn = combinedResult.columns.find((col) => col.id === 'total')
   const hasMultipleBills = combinedResult.bills.length > 1
 
-  // Don't show total column if there's only one bill (redundant)
-  const displayColumns = showDetails
-    ? combinedResult.columns
-    : hasMultipleBills
-      ? [...billColumns, ...(totalColumn ? [totalColumn] : [])]
-      : billColumns
+  // Reorder columns for detail view: group details with their bill, bill comes after details
+  const getOrderedColumns = () => {
+    if (!showDetails) {
+      return hasMultipleBills
+        ? [...billColumns, ...(totalColumn ? [totalColumn] : [])]
+        : billColumns
+    }
+
+    // Group detail columns with their bill columns
+    const ordered: typeof combinedResult.columns = []
+    const detailColumns = combinedResult.columns.filter((col) => col.id.includes('_detail_'))
+    
+    combinedResult.bills.forEach((bill) => {
+      const billColumnId = `bill_${bill.id}`
+      const billColumn = combinedResult.columns.find((col) => col.id === billColumnId)
+      
+      // Find all detail columns for this bill
+      const billDetails = detailColumns.filter((col) => col.id.startsWith(`${billColumnId}_detail_`))
+      
+      // Add details first, then bill column
+      ordered.push(...billDetails)
+      if (billColumn) {
+        ordered.push(billColumn)
+      }
+    })
+    
+    // Add total column at the end if multiple bills
+    if (totalColumn && hasMultipleBills) {
+      ordered.push(totalColumn)
+    }
+    
+    return ordered
+  }
+
+  const displayColumns = getOrderedColumns()
+  
+  // Create a map of column indices to bill groups for background coloring
+  const getColumnGroup = (colId: string): number | null => {
+    if (colId === 'total') return null
+    if (colId.startsWith('bill_') && !colId.includes('_detail_')) {
+      const billIndex = combinedResult.bills.findIndex((b) => colId === `bill_${b.id}`)
+      return billIndex >= 0 ? billIndex : null
+    }
+    if (colId.includes('_detail_')) {
+      const billId = colId.split('_detail_')[0].replace('bill_', '')
+      const billIndex = combinedResult.bills.findIndex((b) => b.id === billId)
+      return billIndex >= 0 ? billIndex : null
+    }
+    return null
+  }
 
   return (
     <div className="space-y-3">
@@ -121,44 +165,84 @@ export function ResultTable({ combinedResult, hideActions = false, compact = fal
             <thead>
               <tr className="bg-slate-50 text-left text-xs uppercase text-slate-600">
                 <th className="rounded-l-xl px-3 py-2">Condominio</th>
-                {displayColumns.map((col) => (
-                  <th key={col.id} className="px-3 py-2 text-right">
-                    {col.label}
-                  </th>
-                ))}
+                {displayColumns.map((col, colIdx) => {
+                  const group = getColumnGroup(col.id)
+                  const isFirstInGroup = colIdx === 0 || getColumnGroup(displayColumns[colIdx - 1]?.id) !== group
+                  const isLastInGroup = colIdx === displayColumns.length - 1 || getColumnGroup(displayColumns[colIdx + 1]?.id) !== group
+                  const bgColor = group !== null ? (group % 2 === 0 ? 'bg-blue-50' : 'bg-amber-50') : 'bg-slate-50'
+                  
+                  return (
+                    <th
+                      key={col.id}
+                      className={`px-3 py-2 text-right ${bgColor} ${isFirstInGroup ? 'border-l-2 border-slate-300' : ''} ${isLastInGroup && group !== null ? 'border-r-2 border-slate-300' : ''}`}
+                    >
+                      {col.label}
+                    </th>
+                  )
+                })}
               </tr>
             </thead>
             <tbody>
-              {combinedResult.rows.map((row, idx) => (
-                <tr
-                  key={row.condoId}
-                  className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}
-                >
-                  <td className="px-3 py-2 font-medium text-slate-800">{row.condoName}</td>
-                  {displayColumns.map((col) => {
-                    // For 'total' column, calculate sum of bill columns
-                    if (col.id === 'total') {
+              {combinedResult.rows.map((row, rowIdx) => {
+                const rowBg = rowIdx % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'
+                return (
+                  <tr key={row.condoId} className={rowBg}>
+                    <td className="px-3 py-2 font-medium text-slate-800">{row.condoName}</td>
+                    {displayColumns.map((col, colIdx) => {
+                      const group = getColumnGroup(col.id)
+                      const isFirstInGroup = colIdx === 0 || getColumnGroup(displayColumns[colIdx - 1]?.id) !== group
+                      const isLastInGroup = colIdx === displayColumns.length - 1 || getColumnGroup(displayColumns[colIdx + 1]?.id) !== group
+                      const bgColor = group !== null ? (group % 2 === 0 ? 'bg-blue-50/30' : 'bg-amber-50/30') : ''
+                      const isBillColumn = col.id.startsWith('bill_') && !col.id.includes('_detail_')
+                      
+                      // For 'total' column, calculate sum of bill columns
+                      if (col.id === 'total') {
+                        return (
+                          <td
+                            key={col.id}
+                            className={`px-3 py-2 text-right font-semibold text-slate-900 ${bgColor} ${isFirstInGroup ? 'border-l-2 border-slate-300' : ''}`}
+                          >
+                            {formatCurrency(
+                              billColumns.reduce((sum, billCol) => sum + (row.allocations[billCol.id] ?? 0), 0)
+                            )}
+                          </td>
+                        )
+                      }
                       return (
-                        <td key={col.id} className="px-3 py-2 text-right font-semibold text-slate-900">
-                          {formatCurrency(
-                            billColumns.reduce((sum, billCol) => sum + (row.allocations[billCol.id] ?? 0), 0)
-                          )}
+                        <td
+                          key={col.id}
+                          className={`px-3 py-2 text-right ${isBillColumn ? 'font-semibold text-slate-900' : 'text-slate-800'} ${bgColor} ${isFirstInGroup ? 'border-l-2 border-slate-300' : ''} ${isLastInGroup && group !== null ? 'border-r-2 border-slate-300' : ''}`}
+                        >
+                          {formatCurrency(row.allocations[col.id] ?? 0)}
                         </td>
                       )
-                    }
-                    return (
-                      <td key={col.id} className="px-3 py-2 text-right text-slate-800">
-                        {formatCurrency(row.allocations[col.id] ?? 0)}
-                      </td>
-                    )
-                  })}
-                </tr>
-              ))}
+                    })}
+                  </tr>
+                )
+              })}
             </tbody>
             <tfoot>
               <tr className="border-t border-slate-200 bg-slate-50 font-semibold">
                 <td className="px-3 py-2 text-slate-800">Totale</td>
-                {displayColumns.map((col) => {
+                {displayColumns.map((col, colIdx) => {
+                  const group = getColumnGroup(col.id)
+                  const isFirstInGroup = colIdx === 0 || getColumnGroup(displayColumns[colIdx - 1]?.id) !== group
+                  const isLastInGroup = colIdx === displayColumns.length - 1 || getColumnGroup(displayColumns[colIdx + 1]?.id) !== group
+                  const bgColor = group !== null ? (group % 2 === 0 ? 'bg-blue-50' : 'bg-amber-50') : 'bg-slate-50'
+                  
+                  // Skip totals for detail columns (only show for bill columns and total column)
+                  const isDetailColumn = col.id.includes('_detail_')
+                  if (isDetailColumn) {
+                    return (
+                      <td
+                        key={col.id}
+                        className={`px-3 py-2 text-right ${bgColor} ${isFirstInGroup ? 'border-l-2 border-slate-300' : ''} ${isLastInGroup && group !== null ? 'border-r-2 border-slate-300' : ''}`}
+                      >
+                        {/* Empty cell for detail columns */}
+                      </td>
+                    )
+                  }
+                  
                   // For 'total' column, calculate sum of bill columns
                   if (col.id === 'total') {
                     const totalSum = combinedResult.rows.reduce(
@@ -166,14 +250,22 @@ export function ResultTable({ combinedResult, hideActions = false, compact = fal
                       0,
                     )
                     return (
-                      <td key={col.id} className="px-3 py-2 text-right text-slate-900">
+                      <td
+                        key={col.id}
+                        className={`px-3 py-2 text-right text-slate-900 ${bgColor} ${isFirstInGroup ? 'border-l-2 border-slate-300' : ''}`}
+                      >
                         {formatCurrency(totalSum)}
                       </td>
                     )
                   }
+                  
+                  // For bill columns, show the sum
                   const sum = combinedResult.rows.reduce((acc, row) => acc + (row.allocations[col.id] ?? 0), 0)
                   return (
-                    <td key={col.id} className="px-3 py-2 text-right text-slate-900">
+                    <td
+                      key={col.id}
+                      className={`px-3 py-2 text-right text-slate-900 ${bgColor} ${isFirstInGroup ? 'border-l-2 border-slate-300' : ''} ${isLastInGroup && group !== null ? 'border-r-2 border-slate-300' : ''}`}
+                    >
                       {formatCurrency(sum)}
                     </td>
                   )
