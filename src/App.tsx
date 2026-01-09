@@ -121,13 +121,13 @@ function App() {
                         key={bill.id}
                         className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm"
                       >
-                        <div>
+      <div>
                           <span className="font-medium text-slate-800">{bill.billLabel}</span>
                           <span className="ml-2 text-slate-600">
                             {new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(bill.amount)}
                           </span>
                           {bill.memo && <span className="ml-2 text-xs text-slate-500">({bill.memo})</span>}
-                        </div>
+      </div>
                         <button
                           type="button"
                           onClick={() => handleRemoveBill(bill.id)}
@@ -135,7 +135,7 @@ function App() {
                           aria-label="Rimuovi"
                         >
                           ✕
-                        </button>
+        </button>
                       </div>
                     ))}
                   </div>
@@ -152,8 +152,8 @@ function App() {
           <p>
             Configurazione salvata in localStorage. Usa l&apos;Admin (⚙️) per gestire condomini, tabelle millesimali e
             regole di riparto. Esporta/Importa JSON per backup o per spostare la config.
-          </p>
-        </div>
+        </p>
+      </div>
       </main>
 
       {showAdmin && (
