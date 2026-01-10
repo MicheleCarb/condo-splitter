@@ -188,11 +188,16 @@ npm run build  # Genera cartella dist/
 - Output directory: `dist`
 - Zero configurazione aggiuntiva
 
-**GitHub Pages**
+**GitHub Pages** (Automatico con GitHub Actions) ⭐ **Consigliato**
+1. **Configura il repository name**: Apri `.github/workflows/deploy.yml` e sostituisci `condo-splitter` con il nome del tuo repository nella riga `BASE_PATH: /condo-splitter/`
+2. **Abilita GitHub Pages**: Vai su Settings → Pages → Source: seleziona "GitHub Actions"
+3. **Push e deploy**: Esegui `git push` sul branch `main` o `master` per avviare il deploy automatico
+4. **Vedi `DEPLOYMENT.md`** per istruzioni dettagliate e troubleshooting
+
+**GitHub Pages** (Manuale)
 ```bash
-npm install
-npm run build
-# Pubblica la cartella dist/ con GitHub Pages
+BASE_PATH=/repo-name/ npm run build  # Sostituisci 'repo-name' con il tuo repo
+# Pubblica la cartella dist/ con GitHub Pages (via gh-pages branch o docs folder)
 ```
 
 **Self-hosting**
