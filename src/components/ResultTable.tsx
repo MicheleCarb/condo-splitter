@@ -126,13 +126,13 @@ export function ResultTable({ combinedResult, hideActions = false, compact = fal
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3 w-full min-w-0">
       <div
-        className={`rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-100 ${compact ? 'text-xs' : 'text-sm'}`}
+        className={`rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-100 ${compact ? 'text-xs' : 'text-sm'} w-full min-w-0`}
       >
         <div
           ref={tableRef}
-          className="space-y-0 bg-white rounded-2xl p-4"
+          className="space-y-0 bg-white rounded-2xl p-4 w-full"
         >
           <div className="flex flex-col gap-2 border-b border-slate-100 pb-3">
             <div className="flex items-center justify-between">
@@ -160,8 +160,10 @@ export function ResultTable({ combinedResult, hideActions = false, compact = fal
             )}
           </div>
 
-          <div className="overflow-x-auto w-full">
-            <table className="mt-3 border-collapse" style={{ minWidth: 'max-content' }}>
+          <div className="overflow-x-auto w-full -mx-4 px-4 md:mx-0 md:px-0 relative">
+            {/* Scroll hint gradient on mobile */}
+            <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-white to-transparent pointer-events-none md:hidden z-10" />
+            <table className="mt-3 border-collapse" style={{ width: 'max-content' }}>
             <thead>
               <tr className="bg-slate-50 text-left text-xs uppercase text-slate-600">
                 <th className="rounded-l-xl px-3 py-2">Condominio</th>

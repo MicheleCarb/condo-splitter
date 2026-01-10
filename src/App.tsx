@@ -8,7 +8,7 @@ import { parseAmount } from './utils/number'
 import { SavedBill } from './types'
 
 function App() {
-  const { config, updateConfig, resetConfig, importConfig } = useConfig()
+  const { config, updateConfig, importConfig } = useConfig()
   const [savedBills, setSavedBills] = useState<SavedBill[]>([])
   const [error, setError] = useState<string | null>(null)
   const [showAdmin, setShowAdmin] = useState(false)
@@ -61,9 +61,9 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white">
-      <header className="border-b border-slate-200 bg-white/80 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl flex-col gap-2 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white overflow-x-hidden w-full max-w-full">
+      <header className="border-b border-slate-200 bg-white/80 backdrop-blur w-full max-w-full overflow-x-hidden">
+        <div className="mx-auto flex max-w-6xl flex-col gap-2 px-4 py-4 sm:flex-row sm:items-center sm:justify-between w-full min-w-0">
           <div>
             <p className="text-xs uppercase text-slate-500">Condo Splitter</p>
             <h1 className="text-2xl font-bold text-slate-900">Riparto bollette immediato</h1>
@@ -79,26 +79,17 @@ function App() {
         </div>
       </header>
 
-      <main className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-6">
-        <div className="grid gap-4 lg:grid-cols-2">
+      <main className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-6 w-full overflow-x-hidden min-w-0">
+        <div className="grid gap-4 lg:grid-cols-2 min-w-0 w-full">
           <BillForm config={config} onSubmit={handleSubmit} onAdminToggle={() => setShowAdmin(true)} />
-          <div className="space-y-2">
-            <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-100">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs uppercase text-slate-500">Passo 2</p>
-                  <h2 className="text-lg font-semibold text-slate-900">Tabella pronta da stampare</h2>
-                  <p className="text-sm text-slate-600">
-                    Formattata in euro (it-IT), identica nell&apos;export PNG.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={resetConfig}
-                  className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                >
-                  Ripristina esempio
-                </button>
+          <div className="space-y-2 min-w-0 w-full">
+            <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-100 w-full min-w-0">
+              <div>
+                <p className="text-xs uppercase text-slate-500">Passo 2</p>
+                <h2 className="text-lg font-semibold text-slate-900">Tabella pronta da stampare</h2>
+                <p className="text-sm text-slate-600">
+                  Formattata in euro (it-IT), identica nell&apos;export PNG.
+                </p>
               </div>
               {error && <p className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
               {savedBills.length > 0 && (
@@ -148,7 +139,7 @@ function App() {
           </div>
         </div>
 
-        <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600">
+        <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600 w-full min-w-0">
           <p>
             Configurazione salvata in localStorage. Usa l&apos;Admin (⚙️) per gestire condomini, tabelle millesimali e
             regole di riparto. Esporta/Importa JSON per backup o per spostare la config.
