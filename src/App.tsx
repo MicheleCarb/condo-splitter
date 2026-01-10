@@ -71,11 +71,6 @@ function App() {
               Flusso in un tap, configurazione sicura per te.
             </p>
           </div>
-          <div className="flex gap-2 text-xs text-slate-600">
-            <span className="rounded-full bg-brand/10 px-3 py-1 font-semibold text-brand">Mobile-first</span>
-            <span className="rounded-full bg-slate-100 px-3 py-1">Condivisione 1-click</span>
-            <span className="rounded-full bg-slate-100 px-3 py-1">Locale + JSON</span>
-          </div>
         </div>
       </header>
 
