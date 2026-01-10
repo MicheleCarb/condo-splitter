@@ -61,6 +61,7 @@ export type AppConfig = {
   condomini: Condo[];
   tables: MillesimalTable[];
   billTypes: BillType[];
+  ownerName?: string;
 };
 
 export type BillInput = {

@@ -351,6 +351,41 @@ export function AdminPanel({ config, onSave, onImport, onClose }: Props) {
 
         {importError && <p className="text-sm text-red-600">{importError}</p>}
 
+        {/* Personalization section */}
+        <section className="rounded-2xl border border-slate-100 bg-slate-50 p-3">
+          <h3 className="text-base font-semibold text-slate-900 mb-2">Personalizzazione</h3>
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-slate-700">
+              Nome proprietario (opzionale)
+            </label>
+            <input
+              type="text"
+              value={draft.ownerName || ''}
+              onChange={(e) => {
+                const value = e.target.value
+                setDraft((prev) => ({
+                  ...prev,
+                  ownerName: value || undefined,
+                }))
+              }}
+              onBlur={(e) => {
+                const trimmed = e.target.value.trim()
+                if (draft.ownerName !== trimmed) {
+                  setDraft((prev) => ({
+                    ...prev,
+                    ownerName: trimmed || undefined,
+                  }))
+                }
+              }}
+              placeholder="Es. Michele"
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
+            />
+            <p className="text-xs text-slate-500">
+              Se impostato, apparirà un saluto personalizzato nell&apos;header.
+            </p>
+          </div>
+        </section>
+
         <div className="grid gap-3 md:grid-cols-2">
           <section className="rounded-2xl border border-slate-100 bg-slate-50 p-3">
             <h3 className="text-base font-semibold text-slate-900">Condomini</h3>

@@ -99,6 +99,9 @@ function App() {
             <p className="text-sm text-slate-600">
               Flusso in un tap, configurazione sicura per te.
             </p>
+            {config.ownerName && (
+              <p className="mt-1 text-sm font-medium text-brand/80">Ciao, {config.ownerName}!</p>
+            )}
           </div>
         </div>
       </header>
