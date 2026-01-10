@@ -95,7 +95,7 @@ function App() {
         <div className="mx-auto flex max-w-6xl flex-col gap-2 px-4 py-4 sm:flex-row sm:items-center sm:justify-between w-full min-w-0">
           <div>
             <p className="text-xs uppercase text-slate-500">Condo Splitter</p>
-            <h1 className="text-2xl font-bold text-slate-900">Riparto bollette immediato</h1>
+            <h1 className="text-2xl font-bold text-slate-900">Ripartizione bollette, facile</h1>
             <p className="text-sm text-slate-600">
               Flusso in un tap, configurazione sicura per te.
             </p>
