@@ -12,9 +12,10 @@ type Props = {
   config: AppConfig
   onSubmit: (values: FormValues) => void
   onAdminToggle: () => void
+  hasExistingBills?: boolean
 }
 
-export function BillForm({ config, onSubmit, onAdminToggle }: Props) {
+export function BillForm({ config, onSubmit, onAdminToggle, hasExistingBills = false }: Props) {
   const firstBillTypeId = config.billTypes[0]?.id ?? ''
   const [billTypeId, setBillTypeId] = useState(firstBillTypeId)
   const [subtypeId, setSubtypeId] = useState<string | undefined>()
@@ -123,7 +124,7 @@ export function BillForm({ config, onSubmit, onAdminToggle }: Props) {
           <label className="text-sm font-medium text-slate-800">Memo (opzionale)</label>
           <input
             type="text"
-            placeholder="Nota per stampa"
+            placeholder="Nota per la bolletta"
             value={memo}
             onChange={(e) => setMemo(e.target.value)}
             className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm shadow-inner focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
@@ -134,7 +135,7 @@ export function BillForm({ config, onSubmit, onAdminToggle }: Props) {
           type="submit"
           className="w-full rounded-2xl bg-brand px-4 py-3 text-lg font-semibold text-white shadow-md transition hover:bg-brand/90 focus:outline-none focus:ring-2 focus:ring-brand/30"
         >
-          Calcola e mostra tabella
+          {hasExistingBills ? 'Aggiungi bolletta' : 'Calcola ripartizione'}
         </button>
       </form>
     </div>

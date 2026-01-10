@@ -95,7 +95,7 @@ export function AdminPanel({ config, onSave, onImport, onClose }: Props) {
 
   const handleAddCondo = () => {
     const newId = `c-${makeId()}`
-    const newName = `Condominio ${draft.condomini.length + 1}`
+    const newName = `Condomino ${draft.condomini.length + 1}`
     setDraft((prev) => {
       const updatedTables = prev.tables.map((t) => ({
         ...t,

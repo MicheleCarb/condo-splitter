@@ -31,3 +31,29 @@ export function formatCurrency(value: number): string {
 export function formatNumber(value: number): string {
   return numberFormatter.format(value)
 }
+
+/**
+ * Format current date in Italian format: "dd Month YYYY" (e.g., "10 Gennaio 2026")
+ */
+export function formatCurrentDate(): string {
+  const now = new Date()
+  const formatter = new Intl.DateTimeFormat('it-IT', {
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric',
+  })
+  const formatted = formatter.format(now)
+  // Capitalize first letter of month name (e.g., "10 gennaio 2026" -> "10 Gennaio 2026")
+  // Format is typically "dd mese YYYY" in Italian
+  const parts = formatted.split(' ')
+  if (parts.length === 3) {
+    // Format: "dd mese YYYY" -> "dd Mese YYYY"
+    const day = parts[0]
+    const month = parts[1]
+    const year = parts[2]
+    const capitalizedMonth = month.charAt(0).toUpperCase() + month.slice(1).toLowerCase()
+    return `${day} ${capitalizedMonth} ${year}`
+  }
+  // Fallback: capitalize first letter of each word
+  return formatted.replace(/\b\w/g, (char) => char.toUpperCase())
+}

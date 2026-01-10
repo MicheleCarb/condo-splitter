@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { CombinedResult, SavedBill } from '../types'
 import { downloadNodeAsPng } from '../services/exportImage'
-import { formatCurrency } from '../utils/number'
+import { formatCurrency, formatCurrentDate } from '../utils/number'
 
 type Props = {
   combinedResult?: CombinedResult | null
@@ -166,7 +166,7 @@ export function ResultTable({ combinedResult, hideActions = false, compact = fal
             <table className="mt-3 border-collapse" style={{ width: 'max-content' }}>
             <thead>
               <tr className="bg-slate-50 text-left text-xs uppercase text-slate-600">
-                <th className="rounded-l-xl px-3 py-2">Condominio</th>
+                <th className="rounded-l-xl px-3 py-2">Condomino</th>
                 {displayColumns.map((col, colIdx) => {
                   const group = getColumnGroup(col.id)
                   const isFirstInGroup = colIdx === 0 || getColumnGroup(displayColumns[colIdx - 1]?.id) !== group
@@ -275,6 +275,11 @@ export function ResultTable({ combinedResult, hideActions = false, compact = fal
               </tr>
             </tfoot>
           </table>
+        </div>
+        
+        {/* Date footer - included in export */}
+        <div className="mt-4 pt-3 border-t border-slate-200 text-right">
+          <p className="text-xs text-slate-500">{formatCurrentDate()}</p>
         </div>
         </div>
 
