@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useRef, useEffect } from 'react'
 import { BillForm } from './components/BillForm'
 import { ResultTable } from './components/ResultTable'
 import { AdminPanel } from './components/AdminPanel'
+import { Toast } from './components/Toast'
 import { useConfig } from './context/ConfigProvider'
 import { calculateSplit, combineBills } from './lib/distribution'
 import { parseAmount } from './utils/number'
@@ -12,17 +13,42 @@ function App() {
   const [savedBills, setSavedBills] = useState<SavedBill[]>([])
   const [error, setError] = useState<string | null>(null)
   const [showAdmin, setShowAdmin] = useState(false)
+  const [showToast, setShowToast] = useState(false)
+  const [highlightTable, setHighlightTable] = useState(false)
+  const tableContainerRef = useRef<HTMLDivElement>(null)
+  const previousBillsCountRef = useRef(0)
 
   const combinedResult = useMemo(() => {
     if (savedBills.length === 0) return null
     return combineBills(config, savedBills)
   }, [config, savedBills])
 
-  const handleSubmit = (data: { billTypeId: string; subtypeId?: string; amountRaw: string; memo?: string }) => {
+  // Auto-scroll and highlight when a new bill is added
+  useEffect(() => {
+    if (savedBills.length > previousBillsCountRef.current && savedBills.length > 0) {
+      // Scroll to table container with smooth behavior
+      if (tableContainerRef.current) {
+        setTimeout(() => {
+          tableContainerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        }, 100)
+      }
+
+      // Trigger visual highlight
+      setHighlightTable(true)
+      setTimeout(() => setHighlightTable(false), 1000)
+
+      // Show toast notification
+      setShowToast(true)
+      setTimeout(() => setShowToast(false), 3000)
+    }
+    previousBillsCountRef.current = savedBills.length
+  }, [savedBills.length])
+
+  const handleSubmit = (data: { billTypeId: string; subtypeId?: string; amountRaw: string; memo?: string }, onSuccess?: () => void) => {
     const amount = parseAmount(data.amountRaw)
     if (amount === null || amount <= 0) {
       setError('Inserisci un importo valido maggiore di zero')
-      return
+      return false
     }
 
     try {
@@ -45,8 +71,11 @@ function App() {
 
       setSavedBills((prev) => [...prev, bill])
       setError(null)
+      onSuccess?.()
+      return true
     } catch (err) {
       setError('Controlla la configurazione: ' + (err as Error).message)
+      return false
     }
   }
 
@@ -78,7 +107,7 @@ function App() {
         <div className="grid gap-4 lg:grid-cols-2 min-w-0 w-full">
           <BillForm config={config} onSubmit={handleSubmit} onAdminToggle={() => setShowAdmin(true)} hasExistingBills={savedBills.length > 0} />
           <div className="space-y-2 min-w-0 w-full">
-            <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-100 w-full min-w-0">
+            <div ref={tableContainerRef} className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-100 w-full min-w-0">
               <div>
                 <p className="text-xs uppercase text-slate-500">Passo 2</p>
                 <h2 className="text-lg font-semibold text-slate-900">Tabella pronta da condividere</h2>
@@ -125,7 +154,7 @@ function App() {
                 </div>
               )}
               <div className="mt-3">
-                <ResultTable combinedResult={combinedResult} savedBills={savedBills} />
+                <ResultTable combinedResult={combinedResult} savedBills={savedBills} highlight={highlightTable} />
               </div>
             </div>
           </div>
@@ -147,6 +176,8 @@ function App() {
           onClose={() => setShowAdmin(false)}
         />
       )}
+
+      <Toast message="Spesa aggiunta alla ripartizione" visible={showToast} onClose={() => setShowToast(false)} />
     </div>
   )
 }

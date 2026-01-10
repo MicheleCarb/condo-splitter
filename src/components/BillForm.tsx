@@ -10,7 +10,7 @@ type FormValues = {
 
 type Props = {
   config: AppConfig
-  onSubmit: (values: FormValues) => void
+  onSubmit: (values: FormValues, onSuccess?: () => void) => boolean | void
   onAdminToggle: () => void
   hasExistingBills?: boolean
 }
@@ -44,7 +44,19 @@ export function BillForm({ config, onSubmit, onAdminToggle, hasExistingBills = f
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!billTypeId) return
-    onSubmit({ billTypeId, subtypeId, amountRaw, memo })
+    const success = onSubmit(
+      { billTypeId, subtypeId, amountRaw, memo },
+      () => {
+        // Clear form on success
+        setAmountRaw('')
+        setMemo('')
+      }
+    )
+    // If onSubmit returns false, don't clear (error case)
+    if (success === true) {
+      setAmountRaw('')
+      setMemo('')
+    }
   }
 
   return (

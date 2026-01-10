@@ -8,9 +8,10 @@ type Props = {
   savedBills?: SavedBill[]
   hideActions?: boolean
   compact?: boolean
+  highlight?: boolean
 }
 
-export function ResultTable({ combinedResult, hideActions = false, compact = false }: Props) {
+export function ResultTable({ combinedResult, hideActions = false, compact = false, highlight = false }: Props) {
   const tableRef = useRef<HTMLDivElement>(null)
   const [downloading, setDownloading] = useState(false)
   const [showDetails, setShowDetails] = useState(false)
@@ -128,7 +129,7 @@ export function ResultTable({ combinedResult, hideActions = false, compact = fal
   return (
     <div className="space-y-3 w-full min-w-0">
       <div
-        className={`rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-100 ${compact ? 'text-xs' : 'text-sm'} w-full min-w-0`}
+        className={`rounded-2xl bg-white p-4 shadow-sm ring-1 transition-all duration-1000 ${highlight ? 'ring-brand ring-2 bg-brand/5' : 'ring-slate-100'} ${compact ? 'text-xs' : 'text-sm'} w-full min-w-0`}
       >
         <div
           ref={tableRef}
