@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
+  <!-- Wallet (brown/tan, rectangular, rounded corners) -->
+  <rect x="20" y="35" width="50" height="35" rx="4" fill="#D4A574" stroke="#2C2416" stroke-width="2.5"/>
+  
+  <!-- Wallet flap on right side -->
+  <rect x="65" y="35" width="8" height="35" rx="4" fill="#B8946A" stroke="#2C2416" stroke-width="2.5"/>
+  
+  <!-- Wallet snap button -->
+  <circle cx="67" cy="52.5" r="2.5" fill="#8B6F47" stroke="#2C2416" stroke-width="1.5"/>
+  
+  <!-- Wallet top opening (curved) -->
+  <path d="M 20 35 Q 45 40, 70 35" stroke="#2C2416" stroke-width="2" fill="none"/>
+  
+  <!-- Golden coin with $ sign -->
+  <circle cx="35" cy="45" r="12" fill="#FFD700" stroke="#2C2416" stroke-width="2.5"/>
+  <text x="35" y="51" font-family="Arial, sans-serif" font-size="16" font-weight="900" text-anchor="middle" fill="#2C2416">$</text>
+  
+  <!-- Green arrow (curved upward and right) -->
+  <path d="M 45 42 Q 58 30, 72 25" stroke="#22C55E" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Arrowhead -->
+  <path d="M 67 26.5 L 72 25 L 68.5 31 Z" fill="#22C55E" stroke="#2C2416" stroke-width="1.5" stroke-linejoin="round"/>
+</svg>
