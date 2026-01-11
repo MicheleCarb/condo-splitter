@@ -312,7 +312,7 @@ export function AdminPanel({ config, isExampleConfig, onSave, onImport, onClose 
   return (
     <div className="fixed inset-0 z-40 overflow-y-auto bg-black/40 px-3 py-6">
       <div className="mx-auto max-w-5xl space-y-4 rounded-3xl bg-white p-4 shadow-xl">
-        <div className="flex items-start justify-between gap-3">
+        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div>
             <p className="text-xs uppercase text-slate-500">Area Admin</p>
             <h2 className="text-xl font-semibold text-slate-900">Configura condomini e regole</h2>
@@ -320,8 +320,8 @@ export function AdminPanel({ config, isExampleConfig, onSave, onImport, onClose 
               Le modifiche sono salvate in locale. Esporta una configurazione per backup.
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            <label className="cursor-pointer rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50">
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="cursor-pointer rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 whitespace-nowrap">
               Importa configurazione
               <input type="file" accept="application/json" className="hidden" onChange={onFileSelected} />
             </label>
@@ -336,14 +336,14 @@ export function AdminPanel({ config, isExampleConfig, onSave, onImport, onClose 
                 a.click()
                 URL.revokeObjectURL(url)
               }}
-              className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
+              className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 whitespace-nowrap"
             >
               Esporta configurazione
             </button>
             <button
               type="button"
               onClick={onClose}
-              className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
+              className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 whitespace-nowrap"
             >
               Chiudi
             </button>
@@ -695,7 +695,7 @@ export function AdminPanel({ config, isExampleConfig, onSave, onImport, onClose 
           </div>
         </section>
 
-        <div className="flex justify-between">
+        <div className="flex flex-col gap-4 md:flex-row md:justify-between">
           <div className="text-xs text-slate-600">
             <p>Salvataggio in locale. Esporta configurazione per backup o per importarla altrove.</p>
             <p>Modifiche alle tabelle richiedono doppia conferma.</p>
@@ -704,14 +704,14 @@ export function AdminPanel({ config, isExampleConfig, onSave, onImport, onClose 
             <button
               type="button"
               onClick={handleSave}
-              className="rounded-xl bg-brand px-4 py-2 text-sm font-semibold text-white shadow hover:bg-brand/90"
+              className="rounded-xl bg-brand px-4 py-2 text-sm font-semibold text-white shadow hover:bg-brand/90 whitespace-nowrap"
             >
               Salva configurazione
             </button>
             <button
               type="button"
               onClick={onClose}
-              className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 whitespace-nowrap"
             >
               Annulla
             </button>
