@@ -326,7 +326,7 @@ export function AdminPanel({ config, isExampleConfig, onSave, onImport, onClose 
 
   return (
     <div className="fixed inset-0 z-40 overflow-y-auto bg-black/40 px-3 py-6">
-      <div className="mx-auto max-w-5xl space-y-4 rounded-3xl bg-white p-4 shadow-xl">
+      <div className="mx-auto max-w-5xl space-y-4 rounded-3xl bg-white p-4 shadow-xl min-w-0 overflow-hidden">
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1">
             <p className="text-xs uppercase text-slate-500">Area Admin</p>
@@ -625,62 +625,83 @@ export function AdminPanel({ config, isExampleConfig, onSave, onImport, onClose 
                     const subtypeName = bill.requiresSubtype ? (sub as BillSubtype).name : 'Regola'
 
                     return (
-                      <div key={subtypeId ?? bill.id} className="mt-2 rounded-lg border border-slate-100 p-3">
-                        <div className="mb-2 flex items-center justify-between">
-                          <p className="text-sm font-semibold text-slate-800">{subtypeName}</p>
-                          <select
-                            value={rule?.kind ?? 'single_table'}
-                            onChange={(e) =>
-                              handleRuleKindChange(bill.id, e.target.value as DistributionRule['kind'], subtypeId)
-                            }
-                            className="rounded-lg border border-slate-200 px-2 py-1 text-sm focus:border-brand focus:outline-none"
-                          >
-                            <option value="single_table">Singola tabella</option>
-                            <option value="weighted_tables">% su più tabelle</option>
-                            <option value="custom_percent">Percentuale per condominio</option>
-                          </select>
+                      <div key={subtypeId ?? bill.id} className="mt-2 rounded-lg border border-slate-100 p-3 min-w-0 overflow-hidden">
+                        <div className="mb-2 flex items-center gap-2 min-w-0">
+                          <p className="text-sm font-semibold text-slate-800 flex-shrink-0">{subtypeName}</p>
+                          <div className="relative flex-1 min-w-0 max-w-full overflow-hidden">
+                            <select
+                              value={rule?.kind ?? 'single_table'}
+                              onChange={(e) =>
+                                handleRuleKindChange(bill.id, e.target.value as DistributionRule['kind'], subtypeId)
+                              }
+                              className="w-full rounded-lg border border-slate-200 px-2 pr-8 py-1 text-sm focus:border-brand focus:outline-none appearance-none bg-white text-ellipsis overflow-hidden whitespace-nowrap"
+                            >
+                              <option value="single_table">Singola tabella</option>
+                              <option value="weighted_tables">% su più tabelle</option>
+                              <option value="custom_percent">Percentuale per condominio</option>
+                            </select>
+                            <div className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-slate-400">
+                              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                              </svg>
+                            </div>
+                          </div>
                         </div>
 
                         {rule?.kind === 'single_table' && (
-                          <div className="flex items-center gap-2">
-                            <label className="text-sm text-slate-700">Tabella</label>
-                            <select
-                              value={rule.tableId}
-                              onChange={(e) =>
-                                updateRule(
-                                  bill.id,
-                                  () => ({ ...rule, tableId: e.target.value }),
-                                  subtypeId,
-                                )
-                              }
-                              className="rounded-lg border border-slate-200 px-2 py-1 text-sm focus:border-brand focus:outline-none"
-                            >
-                              {draft.tables.map((t) => (
-                                <option key={t.id} value={t.id}>
-                                  {t.name}
-                                </option>
-                              ))}
-                            </select>
+                          <div className="flex items-center gap-2 min-w-0">
+                            <label className="text-sm text-slate-700 flex-shrink-0">Tabella</label>
+                            <div className="relative flex-1 min-w-0 overflow-hidden">
+                              <select
+                                value={rule.tableId}
+                                onChange={(e) =>
+                                  updateRule(
+                                    bill.id,
+                                    () => ({ ...rule, tableId: e.target.value }),
+                                    subtypeId,
+                                  )
+                                }
+                                className="w-full rounded-lg border border-slate-200 px-2 pr-8 py-1 text-sm focus:border-brand focus:outline-none appearance-none bg-white text-ellipsis overflow-hidden whitespace-nowrap"
+                              >
+                                {draft.tables.map((t) => (
+                                  <option key={t.id} value={t.id}>
+                                    {t.name}
+                                  </option>
+                                ))}
+                              </select>
+                              <div className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-slate-400">
+                                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                                </svg>
+                              </div>
+                            </div>
                           </div>
                         )}
 
                         {rule?.kind === 'weighted_tables' && (
                           <div className="space-y-2">
                             {rule.tables.map((row, idx) => (
-                              <div key={`${row.tableId}-${idx}`} className="flex items-center gap-2">
-                                <select
-                                  value={row.tableId}
-                                  onChange={(e) =>
-                                    handleWeightedRow(bill.id, subtypeId, idx, 'tableId', e.target.value)
-                                  }
-                                  className="flex-1 rounded-lg border border-slate-200 px-2 py-1 text-sm focus:border-brand focus:outline-none"
-                                >
-                                  {draft.tables.map((t) => (
-                                    <option key={t.id} value={t.id}>
-                                      {t.name}
-                                    </option>
-                                  ))}
-                                </select>
+                              <div key={`${row.tableId}-${idx}`} className="flex items-center gap-2 min-w-0">
+                                <div className="relative flex-1 min-w-0 overflow-hidden">
+                                  <select
+                                    value={row.tableId}
+                                    onChange={(e) =>
+                                      handleWeightedRow(bill.id, subtypeId, idx, 'tableId', e.target.value)
+                                    }
+                                    className="w-full rounded-lg border border-slate-200 px-2 pr-8 py-1 text-sm focus:border-brand focus:outline-none appearance-none bg-white text-ellipsis overflow-hidden whitespace-nowrap"
+                                  >
+                                    {draft.tables.map((t) => (
+                                      <option key={t.id} value={t.id}>
+                                        {t.name}
+                                      </option>
+                                    ))}
+                                  </select>
+                                  <div className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-slate-400">
+                                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                                    </svg>
+                                  </div>
+                                </div>
                                 <input
                                   type="number"
                                   inputMode="decimal"
@@ -772,31 +793,45 @@ export function AdminPanel({ config, isExampleConfig, onSave, onImport, onClose 
               <p className="text-xs text-slate-600">Prova importo e visualizza il riparto.</p>
             </div>
             <div className="flex gap-2">
-              <select
-                value={previewBillTypeId}
-                onChange={(e) => setPreviewBillTypeId(e.target.value)}
-                className="rounded-lg border border-slate-200 px-2 py-1 text-sm focus:border-brand focus:outline-none"
-              >
-                {draft.billTypes.map((bt) => (
-                  <option key={bt.id} value={bt.id}>
-                    {bt.name}
-                  </option>
-                ))}
-              </select>
-              {draft.billTypes.find((b) => b.id === previewBillTypeId)?.requiresSubtype && (
+              <div className="relative flex-1 min-w-0">
                 <select
-                  value={previewSubtypeId}
-                  onChange={(e) => setPreviewSubtypeId(e.target.value)}
-                  className="rounded-lg border border-slate-200 px-2 py-1 text-sm focus:border-brand focus:outline-none"
+                  value={previewBillTypeId}
+                  onChange={(e) => setPreviewBillTypeId(e.target.value)}
+                  className="w-full rounded-lg border border-slate-200 px-2 pr-8 py-1 text-sm focus:border-brand focus:outline-none appearance-none bg-white text-ellipsis overflow-hidden whitespace-nowrap"
                 >
-                  {draft.billTypes
-                    .find((b) => b.id === previewBillTypeId)
-                    ?.subtypes?.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name}
-                      </option>
-                    ))}
+                  {draft.billTypes.map((bt) => (
+                    <option key={bt.id} value={bt.id}>
+                      {bt.name}
+                    </option>
+                  ))}
                 </select>
+                <div className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-slate-400">
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </div>
+              </div>
+              {draft.billTypes.find((b) => b.id === previewBillTypeId)?.requiresSubtype && (
+                <div className="relative flex-1 min-w-0">
+                  <select
+                    value={previewSubtypeId}
+                    onChange={(e) => setPreviewSubtypeId(e.target.value)}
+                    className="w-full rounded-lg border border-slate-200 px-2 pr-8 py-1 text-sm focus:border-brand focus:outline-none appearance-none bg-white text-ellipsis overflow-hidden whitespace-nowrap"
+                  >
+                    {draft.billTypes
+                      .find((b) => b.id === previewBillTypeId)
+                      ?.subtypes?.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.name}
+                        </option>
+                      ))}
+                  </select>
+                  <div className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-slate-400">
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </div>
+                </div>
               )}
               <input
                 type="text"
