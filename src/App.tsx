@@ -6,10 +6,10 @@ import { Toast } from './components/Toast'
 import { useConfig } from './context/ConfigProvider'
 import { calculateSplit, combineBills } from './lib/distribution'
 import { parseAmount } from './utils/number'
-import { SavedBill } from './types'
+import { SavedBill, AppConfig } from './types'
 
 function App() {
-  const { config, updateConfig, importConfig } = useConfig()
+  const { config, updateConfig, importConfig, isExampleConfig, markAsReal } = useConfig()
   const [savedBills, setSavedBills] = useState<SavedBill[]>([])
   const [error, setError] = useState<string | null>(null)
   const [showAdmin, setShowAdmin] = useState(false)
@@ -107,6 +107,55 @@ function App() {
       </header>
 
       <main className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-6 w-full overflow-x-hidden min-w-0">
+        {isExampleConfig && (
+          <div className="rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 to-emerald-50/30 p-6 shadow-sm">
+            <div className="flex flex-col gap-4">
+              <div>
+                <h3 className="text-xl font-semibold text-slate-900">Benvenuto 👋</h3>
+                <p className="mt-2 text-sm text-slate-700">
+                  Prima di iniziare, configuriamo il tuo condominio.
+                  <br />
+                  Puoi importare una configurazione esistente oppure crearne una nuova.
+                </p>
+              </div>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                <label className="cursor-pointer rounded-xl bg-brand px-6 py-3 text-sm font-semibold text-white shadow-sm hover:bg-brand/90 transition whitespace-nowrap text-center">
+                  Importa configurazione
+                  <input
+                    type="file"
+                    accept="application/json"
+                    className="hidden"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0]
+                      if (!file) return
+                      try {
+                        const text = await file.text()
+                        const parsed = JSON.parse(text) as AppConfig
+                        importConfig(parsed)
+                        if (isExampleConfig) {
+                          markAsReal()
+                        }
+                        setError(null)
+                      } catch (err) {
+                        setError('Configurazione non valida')
+                      }
+                      // Reset input so same file can be selected again
+                      e.target.value = ''
+                    }}
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setShowAdmin(true)}
+                  className="text-sm font-medium text-slate-700 hover:text-brand underline underline-offset-2 decoration-1"
+                >
+                  Configura da zero
+                </button>
+              </div>
+              <p className="text-xs text-slate-500">Questa operazione si fa una sola volta.</p>
+            </div>
+          </div>
+        )}
         <div className="grid gap-4 lg:grid-cols-2 min-w-0 w-full">
           <BillForm config={config} onSubmit={handleSubmit} onAdminToggle={() => setShowAdmin(true)} hasExistingBills={savedBills.length > 0} />
           <div className="space-y-2 min-w-0 w-full">
@@ -165,8 +214,8 @@ function App() {
 
         <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600 w-full min-w-0">
           <p>
-            Configurazione salvata in localStorage. Usa l&apos;Admin (⚙️) per gestire condomini, tabelle millesimali e
-            regole di riparto. Esporta/Importa JSON per backup o per spostare la config.
+            Configurazione salvata in locale. Usa l&apos;Admin (⚙️) per gestire condomini, tabelle millesimali e
+            regole di riparto. Esporta/Importa configurazione per backup o per spostare la config.
         </p>
       </div>
       </main>
@@ -174,8 +223,19 @@ function App() {
       {showAdmin && (
         <AdminPanel
           config={config}
-          onSave={updateConfig}
-          onImport={importConfig}
+          isExampleConfig={isExampleConfig}
+          onSave={(newConfig) => {
+            updateConfig(newConfig)
+            if (isExampleConfig) {
+              markAsReal()
+            }
+          }}
+          onImport={(newConfig) => {
+            importConfig(newConfig)
+            if (isExampleConfig) {
+              markAsReal()
+            }
+          }}
           onClose={() => setShowAdmin(false)}
         />
       )}

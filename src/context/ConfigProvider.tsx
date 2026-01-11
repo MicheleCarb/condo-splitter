@@ -1,23 +1,31 @@
 import { createContext, useContext, useMemo, useState } from 'react'
 import { AppConfig } from '../types'
-import { loadConfig as load, resetToSample, saveConfig as persist } from '../lib/storage'
+import { loadConfig as load, resetToSample, saveConfig as persist, isExampleConfig as checkIsExample, markConfigAsReal } from '../lib/storage'
 import { sampleConfig } from '../config/sampleConfig'
 
 type ConfigContextValue = {
   config: AppConfig
+  isExampleConfig: boolean
   updateConfig: (next: AppConfig) => void
   resetConfig: () => void
   importConfig: (next: AppConfig) => void
+  markAsReal: () => void
 }
 
 const ConfigContext = createContext<ConfigContextValue | undefined>(undefined)
 
 export function ConfigProvider({ children }: { children: React.ReactNode }) {
   const [config, setConfig] = useState<AppConfig>(load())
+  const [isExample, setIsExample] = useState<boolean>(checkIsExample())
 
   const updateConfig = (next: AppConfig) => {
     setConfig(next)
     persist(next)
+  }
+
+  const markAsReal = () => {
+    markConfigAsReal()
+    setIsExample(false)
   }
 
   const resetConfig = () => {
@@ -37,8 +45,8 @@ export function ConfigProvider({ children }: { children: React.ReactNode }) {
   }
 
   const value = useMemo(
-    () => ({ config, updateConfig, resetConfig, importConfig }),
-    [config],
+    () => ({ config, isExampleConfig: isExample, updateConfig, resetConfig, importConfig, markAsReal }),
+    [config, isExample],
   )
 
   return <ConfigContext.Provider value={value}>{children}</ConfigContext.Provider>

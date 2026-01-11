@@ -6,6 +6,7 @@ import { ResultTable } from './ResultTable'
 
 type Props = {
   config: AppConfig
+  isExampleConfig: boolean
   onSave: (config: AppConfig) => void
   onImport: (config: AppConfig) => void
   onClose: () => void
@@ -41,7 +42,7 @@ function getRule(billType: BillType, subtypeId?: string): DistributionRule | und
   return billType.rule
 }
 
-export function AdminPanel({ config, onSave, onImport, onClose }: Props) {
+export function AdminPanel({ config, isExampleConfig, onSave, onImport, onClose }: Props) {
   const [draft, setDraft] = useState<AppConfig>(config)
   const [importError, setImportError] = useState<string | null>(null)
   const [previewAmount, setPreviewAmount] = useState('100')
@@ -294,7 +295,7 @@ export function AdminPanel({ config, onSave, onImport, onClose }: Props) {
       onImport(parsed)
       setImportError(null)
     } catch (err) {
-      setImportError('JSON non valido')
+      setImportError('Configurazione non valida')
     }
   }
 
@@ -316,12 +317,12 @@ export function AdminPanel({ config, onSave, onImport, onClose }: Props) {
             <p className="text-xs uppercase text-slate-500">Area Admin</p>
             <h2 className="text-xl font-semibold text-slate-900">Configura condomini e regole</h2>
             <p className="text-sm text-slate-600">
-              Le modifiche sono salvate in locale. Esporta un JSON per backup.
+              Le modifiche sono salvate in locale. Esporta una configurazione per backup.
             </p>
           </div>
           <div className="flex items-center gap-2">
             <label className="cursor-pointer rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50">
-              Importa JSON
+              Importa configurazione
               <input type="file" accept="application/json" className="hidden" onChange={onFileSelected} />
             </label>
             <button
@@ -337,7 +338,7 @@ export function AdminPanel({ config, onSave, onImport, onClose }: Props) {
               }}
               className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
             >
-              Esporta JSON
+              Esporta configurazione
             </button>
             <button
               type="button"
@@ -348,6 +349,23 @@ export function AdminPanel({ config, onSave, onImport, onClose }: Props) {
             </button>
           </div>
         </div>
+
+        {isExampleConfig && (
+          <div className="rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 to-emerald-50/30 p-4 shadow-sm">
+            <div className="mb-3">
+              <h3 className="text-base font-semibold text-slate-900">Configurazione di esempio</h3>
+              <p className="mt-1 text-sm text-slate-700">
+                Questi dati sono solo dimostrativi. Modificali e salva oppure importa una tua configurazione per iniziare.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <label className="cursor-pointer rounded-xl bg-brand px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-brand/90 transition">
+                Importa configurazione
+                <input type="file" accept="application/json" className="hidden" onChange={onFileSelected} />
+              </label>
+            </div>
+          </div>
+        )}
 
         {importError && <p className="text-sm text-red-600">{importError}</p>}
 
@@ -679,7 +697,7 @@ export function AdminPanel({ config, onSave, onImport, onClose }: Props) {
 
         <div className="flex justify-between">
           <div className="text-xs text-slate-600">
-            <p>Salvataggio in locale. Esporta JSON per backup o per importarlo altrove.</p>
+            <p>Salvataggio in locale. Esporta configurazione per backup o per importarla altrove.</p>
             <p>Modifiche alle tabelle richiedono doppia conferma.</p>
           </div>
           <div className="flex gap-2">
