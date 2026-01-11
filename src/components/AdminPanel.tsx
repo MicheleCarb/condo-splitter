@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useRef } from 'react'
 import { AppConfig, BillSubtype, BillType, DistributionRule, MillesimalTable, SavedBill } from '../types'
 import { calculateSplit, combineBills } from '../lib/distribution'
 import { parseAmount } from '../utils/number'
@@ -48,6 +48,8 @@ export function AdminPanel({ config, isExampleConfig, onSave, onImport, onClose 
   const [previewAmount, setPreviewAmount] = useState('100')
   const [previewBillTypeId, setPreviewBillTypeId] = useState<string>(config.billTypes[0]?.id ?? '')
   const [previewSubtypeId, setPreviewSubtypeId] = useState<string | undefined>()
+  const [menuOpen, setMenuOpen] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     setDraft(config)
@@ -61,6 +63,19 @@ export function AdminPanel({ config, isExampleConfig, onSave, onImport, onClose 
       setPreviewSubtypeId(undefined)
     }
   }, [draft.billTypes, previewBillTypeId])
+
+  // Close menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setMenuOpen(false)
+      }
+    }
+    if (menuOpen) {
+      document.addEventListener('mousedown', handleClickOutside)
+      return () => document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [menuOpen])
 
   const previewResult = useMemo(() => {
     const amount = parseAmount(previewAmount)
@@ -312,15 +327,121 @@ export function AdminPanel({ config, isExampleConfig, onSave, onImport, onClose 
   return (
     <div className="fixed inset-0 z-40 overflow-y-auto bg-black/40 px-3 py-6">
       <div className="mx-auto max-w-5xl space-y-4 rounded-3xl bg-white p-4 shadow-xl">
-        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-          <div>
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex-1">
             <p className="text-xs uppercase text-slate-500">Area Admin</p>
             <h2 className="text-xl font-semibold text-slate-900">Configura condomini e regole</h2>
             <p className="text-sm text-slate-600">
               Le modifiche sono salvate in locale. Esporta una configurazione per backup.
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="relative flex-shrink-0 md:hidden" ref={menuRef}>
+            <button
+              type="button"
+              onClick={() => setMenuOpen(!menuOpen)}
+              className="flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:bg-slate-50 active:bg-slate-100"
+              aria-label="Menu opzioni"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-5 w-5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"
+                />
+              </svg>
+            </button>
+            {menuOpen && (
+              <div className="absolute right-0 top-12 z-50 min-w-[200px] rounded-xl border border-slate-200 bg-white shadow-lg ring-1 ring-black/5 animate-[fadeIn_0.15s_ease-out,slideDown_0.15s_ease-out] origin-top-right">
+                <div className="py-1">
+                  <label className="flex cursor-pointer items-center gap-3 px-4 py-3 text-sm text-slate-700 transition hover:bg-slate-50 active:bg-slate-100">
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      className="h-5 w-5 text-slate-400"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      strokeWidth={2}
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+                      />
+                    </svg>
+                    Importa configurazione
+                    <input
+                      type="file"
+                      accept="application/json"
+                      className="hidden"
+                      onChange={(e) => {
+                        onFileSelected(e)
+                        setMenuOpen(false)
+                      }}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const blob = new Blob([JSON.stringify(draft, null, 2)], { type: 'application/json' })
+                      const url = URL.createObjectURL(blob)
+                      const a = document.createElement('a')
+                      a.href = url
+                      a.download = 'condo-config.json'
+                      a.click()
+                      URL.revokeObjectURL(url)
+                      setMenuOpen(false)
+                    }}
+                    className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-slate-700 transition hover:bg-slate-50 active:bg-slate-100"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      className="h-5 w-5 text-slate-400"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      strokeWidth={2}
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                      />
+                    </svg>
+                    Esporta configurazione
+                  </button>
+                  <div className="my-1 border-t border-slate-100" />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMenuOpen(false)
+                      onClose()
+                    }}
+                    className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-slate-700 transition hover:bg-slate-50 active:bg-slate-100"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      className="h-5 w-5 text-slate-400"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      strokeWidth={2}
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                    Chiudi
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+          <div className="hidden flex-wrap items-center gap-2 md:flex">
             <label className="cursor-pointer rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 whitespace-nowrap">
               Importa configurazione
               <input type="file" accept="application/json" className="hidden" onChange={onFileSelected} />
