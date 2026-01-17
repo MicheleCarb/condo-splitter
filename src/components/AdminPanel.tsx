@@ -49,11 +49,42 @@ export function AdminPanel({ config, isExampleConfig, onSave, onImport, onClose 
   const [previewBillTypeId, setPreviewBillTypeId] = useState<string>(config.billTypes[0]?.id ?? '')
   const [previewSubtypeId, setPreviewSubtypeId] = useState<string | undefined>()
   const [menuOpen, setMenuOpen] = useState(false)
+  const [showAddBillType, setShowAddBillType] = useState(false)
+  const [newBillTypeName, setNewBillTypeName] = useState('')
+  const [newBillTypeRequiresSubtype, setNewBillTypeRequiresSubtype] = useState(false)
+  const [confirmDeleteCondo, setConfirmDeleteCondo] = useState<string | null>(null)
+  const [confirmDeleteBillType, setConfirmDeleteBillType] = useState<string | null>(null)
+  const [confirmDeleteTable, setConfirmDeleteTable] = useState<string | null>(null)
+  const [deletedTable, setDeletedTable] = useState<{ table: MillesimalTable; undo: () => void } | null>(null)
+  const [openKebabMenu, setOpenKebabMenu] = useState<{ billTypeId: string; subtypeId?: string; index: number } | null>(null)
+  const [showRemoveWeightedTableConfirm, setShowRemoveWeightedTableConfirm] = useState<{ billTypeId: string; subtypeId?: string; index: number } | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     setDraft(config)
   }, [config])
+
+  // Close kebab menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement
+      // Check if click is inside any kebab menu or its dropdown
+      const clickedKebabMenu = target.closest('[data-kebab-menu]')
+      if (!clickedKebabMenu && openKebabMenu) {
+        setOpenKebabMenu(null)
+      }
+    }
+    if (openKebabMenu) {
+      // Use a small delay to avoid closing immediately when opening
+      const timeoutId = setTimeout(() => {
+        document.addEventListener('mousedown', handleClickOutside)
+      }, 100)
+      return () => {
+        clearTimeout(timeoutId)
+        document.removeEventListener('mousedown', handleClickOutside)
+      }
+    }
+  }, [openKebabMenu])
 
   useEffect(() => {
     const billType = draft.billTypes.find((b) => b.id === previewBillTypeId)
@@ -143,11 +174,73 @@ export function AdminPanel({ config, isExampleConfig, onSave, onImport, onClose 
     })
   }
 
-  const handleTableName = (tableId: string, name: string) => {
-    setDraft((prev) => ({
-      ...prev,
-      tables: prev.tables.map((t) => (t.id === tableId ? { ...t, name } : t)),
-    }))
+  const handleTableIdChange = (oldId: string, newId: string) => {
+    // Validate: max 2 characters, alphanumeric only
+    if (newId.length > 2 || !/^[A-Za-z0-9]*$/.test(newId)) {
+      return // Don't update if invalid
+    }
+
+    // Check if new ID already exists (and is not the same as old)
+    const exists = draft.tables.some((t) => t.id === newId && t.id !== oldId)
+    if (exists) {
+      return // Don't update if ID already exists
+    }
+
+    setDraft((prev) => {
+      // Update table ID
+      const updatedTables = prev.tables.map((t) =>
+        t.id === oldId
+          ? {
+              ...t,
+              id: newId || oldId, // Keep old if empty
+              name: `Tabella ${newId || oldId}`,
+            }
+          : t,
+      )
+
+      // Update all references in billTypes
+      const updatedBillTypes = prev.billTypes.map((bt) => {
+        const updateRuleInBillType = (rule?: DistributionRule): DistributionRule | undefined => {
+          if (!rule) return rule
+
+          if (rule.kind === 'single_table') {
+            return rule.tableId === oldId ? { ...rule, tableId: newId || oldId } : rule
+          }
+
+          if (rule.kind === 'weighted_tables') {
+            return {
+              ...rule,
+              tables: rule.tables.map((wt) =>
+                wt.tableId === oldId ? { ...wt, tableId: newId || oldId } : wt,
+              ),
+            }
+          }
+
+          return rule
+        }
+
+        // Update main rule
+        const updatedRule = updateRuleInBillType(bt.rule)
+
+        // Update subtype rules
+        const updatedSubtypes = bt.subtypes?.map((sub) => ({
+          ...sub,
+          rule: updateRuleInBillType(sub.rule)!,
+        }))
+
+        return {
+          ...bt,
+          rule: updatedRule,
+          subtypes: updatedSubtypes,
+        }
+      })
+
+      return {
+        ...prev,
+        tables: updatedTables,
+        billTypes: updatedBillTypes,
+      }
+    })
   }
 
   const handleTableValue = (tableId: string, condoId: string, value: number) => {
@@ -172,6 +265,145 @@ export function AdminPanel({ config, isExampleConfig, onSave, onImport, onClose 
       entries: draft.condomini.map((c) => ({ condoId: c.id, value: 0 })),
     }
     setDraft((prev) => ({ ...prev, tables: [...prev.tables, newTable] }))
+  }
+
+  const handleAddBillType = () => {
+    if (!newBillTypeName.trim()) {
+      setImportError('Inserisci un nome per la tipologia')
+      return
+    }
+
+    // Check if name already exists
+    const nameExists = draft.billTypes.some((bt) => bt.name.toLowerCase() === newBillTypeName.trim().toLowerCase())
+    if (nameExists) {
+      setImportError('Questa tipologia esiste già')
+      return
+    }
+
+    const newId = `bt-${makeId()}`
+    const firstTableId = draft.tables[0]?.id ?? ''
+    const defaultRule: DistributionRule = {
+      kind: 'single_table',
+      tableId: firstTableId,
+      description: '',
+    }
+
+    const newBillType: BillType = {
+      id: newId,
+      name: newBillTypeName.trim(),
+      requiresSubtype: newBillTypeRequiresSubtype,
+      ...(newBillTypeRequiresSubtype
+        ? {
+            subtypes: [
+              {
+                id: `st-${makeId()}`,
+                name: 'Default',
+                rule: defaultRule,
+              },
+            ],
+          }
+        : {
+            rule: defaultRule,
+          }),
+    }
+
+    setDraft((prev) => ({
+      ...prev,
+      billTypes: [...prev.billTypes, newBillType],
+    }))
+
+    // Reset form
+    setNewBillTypeName('')
+    setNewBillTypeRequiresSubtype(false)
+    setShowAddBillType(false)
+    setImportError(null)
+  }
+
+  const handleRemoveBillType = (billTypeId: string) => {
+    setDraft((prev) => ({
+      ...prev,
+      billTypes: prev.billTypes.filter((bt) => bt.id !== billTypeId),
+    }))
+    setConfirmDeleteBillType(null)
+  }
+
+  const isTableUsed = (tableId: string): { used: boolean; count: number } => {
+    let count = 0
+    draft.billTypes.forEach((bt) => {
+      // Check main rule
+      if (bt.rule) {
+        if (bt.rule.kind === 'single_table' && bt.rule.tableId === tableId) count++
+        if (bt.rule.kind === 'weighted_tables' && bt.rule.tables.some((t) => t.tableId === tableId)) count++
+      }
+      // Check subtype rules
+      if (bt.subtypes) {
+        bt.subtypes.forEach((sub) => {
+          if (sub.rule.kind === 'single_table' && sub.rule.tableId === tableId) count++
+          if (sub.rule.kind === 'weighted_tables' && sub.rule.tables.some((t) => t.tableId === tableId)) count++
+        })
+      }
+    })
+    return { used: count > 0, count }
+  }
+
+  const handleRemoveTable = (tableId: string) => {
+    const tableToDelete = draft.tables.find((t) => t.id === tableId)
+    if (!tableToDelete) return
+
+    setDraft((prev) => ({
+      ...prev,
+      tables: prev.tables.filter((t) => t.id !== tableId),
+    }))
+    setConfirmDeleteTable(null)
+
+    // Show toast with undo
+    setDeletedTable({
+      table: tableToDelete,
+      undo: () => {
+        setDraft((prev) => ({
+          ...prev,
+          tables: [...prev.tables, tableToDelete].sort((a, b) => a.id.localeCompare(b.id)),
+        }))
+        setDeletedTable(null)
+      },
+    })
+
+    // Auto-hide toast after 5 seconds
+    setTimeout(() => {
+      setDeletedTable(null)
+    }, 5000)
+  }
+
+  const scrollToBillTypesUsingTable = (tableId: string) => {
+    // Find bill types that use this table
+    const usingBillTypes = draft.billTypes.filter((bt) => {
+      if (bt.rule) {
+        if (bt.rule.kind === 'single_table' && bt.rule.tableId === tableId) return true
+        if (bt.rule.kind === 'weighted_tables' && bt.rule.tables.some((t) => t.tableId === tableId)) return true
+      }
+      if (bt.subtypes) {
+        return bt.subtypes.some((sub) => {
+          if (sub.rule.kind === 'single_table' && sub.rule.tableId === tableId) return true
+          if (sub.rule.kind === 'weighted_tables' && sub.rule.tables.some((t) => t.tableId === tableId)) return true
+          return false
+        })
+      }
+      return false
+    })
+
+    if (usingBillTypes.length > 0) {
+      // Scroll to first bill type that uses this table
+      const firstBillTypeId = usingBillTypes[0].id
+      const element = document.getElementById(`bill-type-${firstBillTypeId}`)
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        // Highlight with a temporary class
+        element.classList.add('ring-2', 'ring-brand', 'ring-offset-2')
+        setTimeout(() => {
+          element.classList.remove('ring-2', 'ring-brand', 'ring-offset-2')
+        }, 2000)
+      }
+    }
   }
 
   const updateRule = (
@@ -229,10 +461,17 @@ export function AdminPanel({ config, isExampleConfig, onSave, onImport, onClose 
       (rule) => {
         if (!rule || rule.kind !== 'weighted_tables') return { kind: 'weighted_tables', tables: [] }
         const tables = [...rule.tables]
-        tables[index] =
-          field === 'tableId'
-            ? { ...tables[index], tableId: value }
-            : { ...tables[index], weight: Number(value) || 0 }
+        if (field === 'tableId') {
+          tables[index] = { ...tables[index], tableId: value }
+        } else {
+          // Validate weight: 0-1 with max 2 decimals
+          const numValue = Number(value)
+          let weight = 0
+          if (value !== '' && !isNaN(numValue) && numValue >= 0 && numValue <= 1) {
+            weight = Math.round(numValue * 100) / 100 // Round to 2 decimals
+          }
+          tables[index] = { ...tables[index], weight }
+        }
         return { ...rule, tables }
       },
       subtypeId,
@@ -253,6 +492,32 @@ export function AdminPanel({ config, isExampleConfig, onSave, onImport, onClose 
       },
       subtypeId,
     )
+  }
+
+  const removeWeightedRow = (billTypeId: string, subtypeId: string | undefined, index: number) => {
+    updateRule(
+      billTypeId,
+      (rule) => {
+        if (!rule || rule.kind !== 'weighted_tables') {
+          return { kind: 'weighted_tables', tables: [] }
+        }
+        const newTables = rule.tables.filter((_, idx) => idx !== index)
+        // Ensure at least one table remains
+        if (newTables.length === 0 && draft.tables.length > 0) {
+          return {
+            ...rule,
+            tables: [{ tableId: draft.tables[0]?.id ?? '', weight: 1 }],
+          }
+        }
+        return {
+          ...rule,
+          tables: newTables,
+        }
+      },
+      subtypeId,
+    )
+    setShowRemoveWeightedTableConfirm(null)
+    setOpenKebabMenu(null)
   }
 
   const handleCustomPercent = (
@@ -495,7 +760,7 @@ export function AdminPanel({ config, isExampleConfig, onSave, onImport, onClose 
           <h3 className="text-base font-semibold text-slate-900 mb-2">Personalizzazione</h3>
           <div className="space-y-2">
             <label className="block text-sm font-medium text-slate-700">
-              Nome proprietario (opzionale)
+              Nome amministratore (opzionale)
             </label>
             <input
               type="text"
@@ -536,13 +801,32 @@ export function AdminPanel({ config, isExampleConfig, onSave, onImport, onClose 
                     onChange={(e) => handleCondoChange(c.id, e.target.value)}
                     className="w-full rounded-lg border border-slate-200 px-2 py-2 text-sm focus:border-brand focus:outline-none"
                   />
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveCondo(c.id)}
-                    className="rounded-lg border border-slate-200 px-2 py-2 text-xs text-slate-600 hover:bg-slate-100"
-                  >
-                    Elimina
-                  </button>
+                  {confirmDeleteCondo === c.id ? (
+                    <div className="flex gap-1 flex-shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveCondo(c.id)}
+                        className="rounded-lg border border-red-300 bg-red-50 px-2 py-2 text-xs font-medium text-red-700 hover:bg-red-100"
+                      >
+                        Conferma
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setConfirmDeleteCondo(null)}
+                        className="rounded-lg border border-slate-200 px-2 py-2 text-xs text-slate-600 hover:bg-slate-100"
+                      >
+                        Annulla
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setConfirmDeleteCondo(c.id)}
+                      className="rounded-lg border border-slate-200 px-2 py-2 text-xs text-slate-600 hover:bg-slate-100"
+                    >
+                      Elimina
+                    </button>
+                  )}
                 </div>
               ))}
               <button
@@ -558,35 +842,121 @@ export function AdminPanel({ config, isExampleConfig, onSave, onImport, onClose 
           <section className="rounded-2xl border border-slate-100 bg-slate-50 p-3">
             <h3 className="text-base font-semibold text-slate-900">Tabelle millesimali</h3>
             <div className="space-y-3">
-              {draft.tables.map((table) => (
-                <div key={table.id} className="rounded-xl bg-white p-3 shadow-sm ring-1 ring-slate-100">
-                  <div className="mb-2 flex items-center gap-2">
-                    <input
-                      value={table.name}
-                      onChange={(e) => handleTableName(table.id, e.target.value)}
-                      className="w-full rounded-lg border border-slate-200 px-2 py-2 text-sm font-semibold focus:border-brand focus:outline-none"
-                    />
-                    <span className="rounded-lg bg-slate-100 px-2 py-1 text-xs text-slate-600">{table.id}</span>
-                  </div>
-                  <div className="space-y-2">
-                    {draft.condomini.map((condo) => {
-                      const entry = table.entries.find((e) => e.condoId === condo.id)
-                      return (
-                        <label key={condo.id} className="flex items-center justify-between text-sm text-slate-700">
-                          <span>{condo.name}</span>
+              {draft.tables.map((table) => {
+                const tableUsage = isTableUsed(table.id)
+                return (
+                  <div key={table.id} className="rounded-xl bg-white p-3 shadow-sm ring-1 ring-slate-100">
+                    <div className="mb-2">
+                      <div className="flex flex-wrap items-center gap-2 justify-between">
+                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                          <label className="text-sm font-semibold text-slate-700 whitespace-nowrap">Tabella</label>
                           <input
-                            type="number"
-                            inputMode="decimal"
-                            value={entry?.value ?? 0}
-                            onChange={(e) => handleTableValue(table.id, condo.id, Number(e.target.value) || 0)}
-                            className="w-24 rounded-lg border border-slate-200 px-2 py-1 text-right focus:border-brand focus:outline-none"
+                            type="text"
+                            value={table.id}
+                            onChange={(e) => handleTableIdChange(table.id, e.target.value.toUpperCase())}
+                            maxLength={2}
+                            pattern="[A-Za-z0-9]{1,2}"
+                            className="w-16 rounded-lg border border-slate-200 px-2 py-1.5 text-sm font-semibold text-center uppercase focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
+                            placeholder="ID"
+                            title="ID tabella (max 2 caratteri alfanumerici)"
                           />
-                        </label>
-                      )
-                    })}
+                        </div>
+                        {confirmDeleteTable === table.id ? (
+                          <div className="flex flex-col gap-2 sm:flex-row sm:items-center w-full sm:w-auto">
+                            <p className="text-xs text-slate-600 sm:mr-2">Vuoi eliminare la tabella {table.id}?</p>
+                            <div className="flex gap-1 flex-shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveTable(table.id)}
+                                className="rounded-lg border border-red-300 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100 whitespace-nowrap flex items-center gap-1"
+                              >
+                                <svg
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  className="h-3.5 w-3.5"
+                                  fill="none"
+                                  viewBox="0 0 24 24"
+                                  stroke="currentColor"
+                                  strokeWidth={2}
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                                  />
+                                </svg>
+                                Elimina
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setConfirmDeleteTable(null)}
+                                className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-100 whitespace-nowrap"
+                              >
+                                Annulla
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="relative group">
+                            <button
+                              type="button"
+                              onClick={() => setConfirmDeleteTable(table.id)}
+                              disabled={tableUsage.used}
+                              className="rounded-lg border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap flex-shrink-0 flex items-center gap-1"
+                              title={
+                                tableUsage.used
+                                  ? `Impossibile eliminare: questa tabella è usata in ${tableUsage.count} ${tableUsage.count === 1 ? 'regola' : 'regole'} di riparto. Rimuovila prima dalle regole per abilitare l'eliminazione.`
+                                  : undefined
+                              }
+                            >
+                              <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                className={`h-3.5 w-3.5 ${tableUsage.used ? 'text-slate-400' : 'text-slate-600'}`}
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                                strokeWidth={2}
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                                />
+                              </svg>
+                              Elimina tabella
+                            </button>
+                          </span>
+                        )}
+                      </div>
+                      {tableUsage.used && confirmDeleteTable !== table.id && (
+                        <button
+                          type="button"
+                          onClick={() => scrollToBillTypesUsingTable(table.id)}
+                          className="mt-2 text-xs text-slate-500 hover:text-brand underline cursor-pointer"
+                        >
+                          Usata in {tableUsage.count} {tableUsage.count === 1 ? 'regola' : 'regole'} di riparto
+                        </button>
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      {draft.condomini.map((condo) => {
+                        const entry = table.entries.find((e) => e.condoId === condo.id)
+                        return (
+                          <label key={condo.id} className="flex items-center justify-between gap-2 text-sm min-w-0">
+                            <span className="text-slate-600 flex-shrink-0">{condo.name}</span>
+                            <input
+                              type="number"
+                              inputMode="decimal"
+                              value={entry?.value ?? 0}
+                              onChange={(e) => handleTableValue(table.id, condo.id, Number(e.target.value) || 0)}
+                              className="w-24 rounded-lg border border-slate-200 px-2 py-1 text-right font-medium text-slate-900 focus:border-brand focus:outline-none flex-shrink-0"
+                            />
+                          </label>
+                        )
+                      })}
+                    </div>
                   </div>
-                </div>
-              ))}
+                )
+              })}
               <button
                 type="button"
                 onClick={handleAddTable}
@@ -606,13 +976,44 @@ export function AdminPanel({ config, isExampleConfig, onSave, onImport, onClose 
 
           <div className="mt-3 space-y-3">
             {draft.billTypes.map((bill) => (
-              <div key={bill.id} className="rounded-xl bg-white p-3 shadow-sm ring-1 ring-slate-100">
-                <div className="flex items-center justify-between">
-                  <div>
+              <div key={bill.id} id={`bill-type-${bill.id}`} className="rounded-xl bg-white p-3 shadow-sm ring-1 ring-slate-100 min-w-0 overflow-hidden transition-all">
+                  <div className="flex items-center justify-between gap-2">
+                  <div className="flex-1 min-w-0">
                     <p className="text-xs uppercase text-slate-500">Tipo</p>
                     <p className="text-base font-semibold text-slate-900">{bill.name}</p>
                   </div>
-                  {bill.requiresSubtype && <span className="text-xs text-slate-600">Ha sottotipi</span>}
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    {bill.requiresSubtype && <span className="text-xs text-slate-600 whitespace-nowrap">Ha sottotipi</span>}
+                    {confirmDeleteBillType === bill.id ? (
+                      <div className="flex gap-1">
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveBillType(bill.id)}
+                          className="rounded-lg border border-red-300 bg-red-50 px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-100 whitespace-nowrap"
+                          aria-label="Conferma eliminazione"
+                        >
+                          Conferma
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setConfirmDeleteBillType(null)}
+                          className="rounded-lg border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-slate-100 whitespace-nowrap"
+                          aria-label="Annulla eliminazione"
+                        >
+                          Annulla
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setConfirmDeleteBillType(bill.id)}
+                        className="rounded-lg border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-slate-100 whitespace-nowrap"
+                        aria-label="Elimina tipologia"
+                      >
+                        Elimina
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 {(bill.requiresSubtype ? bill.subtypes ?? [] : [{ id: bill.id, name: bill.name, rule: bill.rule }]).map(
@@ -680,40 +1081,84 @@ export function AdminPanel({ config, isExampleConfig, onSave, onImport, onClose 
 
                         {rule?.kind === 'weighted_tables' && (
                           <div className="space-y-2">
-                            {rule.tables.map((row, idx) => (
-                              <div key={`${row.tableId}-${idx}`} className="flex items-center gap-2 min-w-0">
-                                <div className="relative flex-1 min-w-0 overflow-hidden">
-                                  <select
-                                    value={row.tableId}
-                                    onChange={(e) =>
-                                      handleWeightedRow(bill.id, subtypeId, idx, 'tableId', e.target.value)
-                                    }
-                                    className="w-full rounded-lg border border-slate-200 px-2 pr-8 py-1 text-sm focus:border-brand focus:outline-none appearance-none bg-white text-ellipsis overflow-hidden whitespace-nowrap"
-                                  >
-                                    {draft.tables.map((t) => (
-                                      <option key={t.id} value={t.id}>
-                                        {t.name}
-                                      </option>
-                                    ))}
-                                  </select>
-                                  <div className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-slate-400">
-                                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                                    </svg>
+                            {rule.tables.map((row, idx) => {
+                              // Create a unique key for this specific row to compare
+                              const rowKey = `${bill.id}|${subtypeId ?? 'main'}|${idx}`
+                              const currentKebabKey = openKebabMenu 
+                                ? `${openKebabMenu.billTypeId}|${openKebabMenu.subtypeId ?? 'main'}|${openKebabMenu.index}` 
+                                : null
+                              const isKebabOpen = currentKebabKey === rowKey
+                              return (
+                                <div key={`${row.tableId}-${idx}`} className="flex items-center gap-1.5 min-w-0">
+                                  <div className="relative flex-1 min-w-0 overflow-hidden">
+                                    <select
+                                      value={row.tableId}
+                                      onChange={(e) =>
+                                        handleWeightedRow(bill.id, subtypeId, idx, 'tableId', e.target.value)
+                                      }
+                                      className="w-full rounded-lg border border-slate-200 px-2 pr-8 py-1 text-sm focus:border-brand focus:outline-none appearance-none bg-white truncate"
+                                    >
+                                      {draft.tables.map((t) => (
+                                        <option key={t.id} value={t.id}>
+                                          {t.name}
+                                        </option>
+                                      ))}
+                                    </select>
+                                    <div className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-slate-400">
+                                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                                      </svg>
+                                    </div>
+                                  </div>
+                                  <input
+                                    type="number"
+                                    inputMode="decimal"
+                                    step="0.01"
+                                    min="0"
+                                    max="1"
+                                    value={row.weight === 0 ? '' : row.weight}
+                                    onChange={(e) => {
+                                      const val = e.target.value
+                                      if (val === '' || (Number(val) >= 0 && Number(val) <= 1)) {
+                                        handleWeightedRow(bill.id, subtypeId, idx, 'weight', val)
+                                      }
+                                    }}
+                                    className="w-16 sm:w-20 rounded-lg border border-slate-200 px-1.5 py-1 text-right text-sm font-medium text-slate-900 focus:border-brand focus:outline-none flex-shrink-0"
+                                    placeholder="0.00"
+                                  />
+                                  <div className="relative flex-shrink-0" data-kebab-menu>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        setOpenKebabMenu(isKebabOpen ? null : { billTypeId: bill.id, subtypeId, index: idx })
+                                      }}
+                                      className="w-6 h-6 rounded flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+                                      aria-label="Menu opzioni"
+                                    >
+                                      <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+                                        <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
+                                      </svg>
+                                    </button>
+                                    {isKebabOpen && (
+                                      <div className="absolute right-0 top-8 z-10 w-36 rounded-lg border border-slate-200 bg-white shadow-lg ring-1 ring-slate-900/5">
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation()
+                                            setOpenKebabMenu(null)
+                                            setShowRemoveWeightedTableConfirm({ billTypeId: bill.id, subtypeId, index: idx })
+                                          }}
+                                          className="w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 rounded-t-lg"
+                                        >
+                                          Rimuovi riga
+                                        </button>
+                                      </div>
+                                    )}
                                   </div>
                                 </div>
-                                <input
-                                  type="number"
-                                  inputMode="decimal"
-                                  value={row.weight}
-                                  onChange={(e) =>
-                                    handleWeightedRow(bill.id, subtypeId, idx, 'weight', e.target.value)
-                                  }
-                                  className="w-24 rounded-lg border border-slate-200 px-2 py-1 text-right text-sm focus:border-brand focus:outline-none"
-                                />
-                                <span className="text-xs text-slate-500">peso</span>
-                              </div>
-                            ))}
+                              )
+                            })}
                             <button
                               type="button"
                               onClick={() => addWeightedRow(bill.id, subtypeId)}
@@ -783,21 +1228,87 @@ export function AdminPanel({ config, isExampleConfig, onSave, onImport, onClose 
                 )}
               </div>
             ))}
+            {showAddBillType ? (
+              <div className="rounded-xl border-2 border-dashed border-brand bg-white p-4 shadow-sm ring-1 ring-slate-100">
+                <h4 className="mb-3 text-sm font-semibold text-slate-900">Nuova tipologia</h4>
+                <div className="space-y-3">
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-slate-700">
+                      Nome tipologia <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={newBillTypeName}
+                      onChange={(e) => {
+                        setNewBillTypeName(e.target.value)
+                        setImportError(null)
+                      }}
+                      placeholder="Es. Luce, Riscaldamento"
+                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
+                      autoFocus
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="requiresSubtype"
+                      checked={newBillTypeRequiresSubtype}
+                      onChange={(e) => setNewBillTypeRequiresSubtype(e.target.checked)}
+                      className="h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand"
+                    />
+                    <label htmlFor="requiresSubtype" className="text-sm text-slate-700">
+                      Richiede sottotipo?
+                    </label>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={handleAddBillType}
+                      className="flex-1 rounded-lg bg-brand px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-brand/90"
+                    >
+                      Aggiungi
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowAddBillType(false)
+                        setNewBillTypeName('')
+                        setNewBillTypeRequiresSubtype(false)
+                        setImportError(null)
+                      }}
+                      className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                    >
+                      Annulla
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setShowAddBillType(true)}
+                className="w-full rounded-lg border border-dashed border-brand px-3 py-2 text-sm font-semibold text-brand hover:bg-brand/5"
+              >
+                + Aggiungi regola
+              </button>
+            )}
           </div>
         </section>
 
         <section className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-base font-semibold text-slate-900">Anteprima regola</h3>
-              <p className="text-xs text-slate-600">Prova importo e visualizza il riparto.</p>
-            </div>
-            <div className="flex gap-2">
-              <div className="relative flex-1 min-w-0">
+          <div>
+            <h3 className="text-base font-semibold text-slate-900">Anteprima regola</h3>
+            <p className="mt-1 text-xs text-slate-600">Prova importo e visualizza il riparto.</p>
+          </div>
+          <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-end sm:gap-4">
+            <div className="flex-1 min-w-0">
+              <label className="mb-1 block text-xs font-medium text-slate-700">Tipo</label>
+              <div className="relative">
                 <select
                   value={previewBillTypeId}
                   onChange={(e) => setPreviewBillTypeId(e.target.value)}
-                  className="w-full rounded-lg border border-slate-200 px-2 pr-8 py-1 text-sm focus:border-brand focus:outline-none appearance-none bg-white text-ellipsis overflow-hidden whitespace-nowrap"
+                  title={draft.billTypes.find((bt) => bt.id === previewBillTypeId)?.name ?? ''}
+                  className="w-full rounded-lg border border-slate-200 px-2 pr-8 py-1 text-sm text-left focus:border-brand focus:outline-none appearance-none bg-white"
                 >
                   {draft.billTypes.map((bt) => (
                     <option key={bt.id} value={bt.id}>
@@ -811,12 +1322,15 @@ export function AdminPanel({ config, isExampleConfig, onSave, onImport, onClose 
                   </svg>
                 </div>
               </div>
-              {draft.billTypes.find((b) => b.id === previewBillTypeId)?.requiresSubtype && (
-                <div className="relative flex-1 min-w-0">
+            </div>
+            {draft.billTypes.find((b) => b.id === previewBillTypeId)?.requiresSubtype && (
+              <div className="flex-1 min-w-0">
+                <label className="mb-1 block text-xs font-medium text-slate-700">Sottotipo</label>
+                <div className="relative">
                   <select
                     value={previewSubtypeId}
                     onChange={(e) => setPreviewSubtypeId(e.target.value)}
-                    className="w-full rounded-lg border border-slate-200 px-2 pr-8 py-1 text-sm focus:border-brand focus:outline-none appearance-none bg-white text-ellipsis overflow-hidden whitespace-nowrap"
+                    className="w-full rounded-lg border border-slate-200 px-2 pr-8 py-1 text-sm focus:border-brand focus:outline-none appearance-none bg-white"
                   >
                     {draft.billTypes
                       .find((b) => b.id === previewBillTypeId)
@@ -832,13 +1346,19 @@ export function AdminPanel({ config, isExampleConfig, onSave, onImport, onClose 
                     </svg>
                   </div>
                 </div>
-              )}
-              <input
-                type="text"
-                value={previewAmount}
-                onChange={(e) => setPreviewAmount(e.target.value)}
-                className="w-28 rounded-lg border border-slate-200 px-2 py-1 text-sm focus:border-brand focus:outline-none"
-              />
+              </div>
+            )}
+            <div className="flex-1 min-w-0 sm:flex-initial sm:min-w-[120px]">
+              <label className="mb-1 block text-xs font-medium text-slate-700">Importo</label>
+              <div className="flex items-center gap-1">
+                <input
+                  type="text"
+                  value={previewAmount}
+                  onChange={(e) => setPreviewAmount(e.target.value)}
+                  className="flex-1 rounded-lg border border-slate-200 px-2 py-1 text-sm focus:border-brand focus:outline-none"
+                />
+                <span className="text-sm text-slate-600">€</span>
+              </div>
             </div>
           </div>
 
@@ -874,6 +1394,56 @@ export function AdminPanel({ config, isExampleConfig, onSave, onImport, onClose 
           </div>
         </div>
       </div>
+
+      {/* Confirmation modal for removing weighted table row */}
+      {showRemoveWeightedTableConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 p-4">
+          <div className="w-full max-w-sm rounded-lg border border-slate-200 bg-white shadow-xl">
+            <div className="px-4 py-3 border-b border-slate-200">
+              <h3 className="text-sm font-semibold text-slate-900">Conferma rimozione?</h3>
+            </div>
+            <div className="px-4 py-3">
+              <p className="text-sm text-slate-600">Vuoi rimuovere questa riga dalla configurazione?</p>
+            </div>
+            <div className="px-4 py-3 border-t border-slate-200 flex gap-2 justify-end">
+              <button
+                type="button"
+                onClick={() => setShowRemoveWeightedTableConfirm(null)}
+                className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              >
+                No
+              </button>
+              <button
+                type="button"
+                onClick={() => removeWeightedRow(showRemoveWeightedTableConfirm.billTypeId, showRemoveWeightedTableConfirm.subtypeId, showRemoveWeightedTableConfirm.index)}
+                className="rounded-lg border border-red-300 bg-red-50 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-100"
+              >
+                Sì
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Toast notification for deleted table */}
+      {deletedTable && (
+        <div className="fixed bottom-4 left-4 right-4 sm:left-auto sm:right-4 sm:w-auto z-50 transition-all duration-200 ease-out">
+          <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-lg ring-1 ring-slate-900/5">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm text-slate-700">
+                Tabella <span className="font-semibold">{deletedTable.table.id}</span> eliminata
+              </p>
+              <button
+                type="button"
+                onClick={deletedTable.undo}
+                className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 whitespace-nowrap self-end sm:self-auto"
+              >
+                Annulla
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
