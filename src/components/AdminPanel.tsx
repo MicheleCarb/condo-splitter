@@ -58,6 +58,12 @@ export function AdminPanel({ config, isExampleConfig, onSave, onImport, onClose 
   const [deletedTable, setDeletedTable] = useState<{ table: MillesimalTable; undo: () => void } | null>(null)
   const [openKebabMenu, setOpenKebabMenu] = useState<{ billTypeId: string; subtypeId?: string; index: number } | null>(null)
   const [showRemoveWeightedTableConfirm, setShowRemoveWeightedTableConfirm] = useState<{ billTypeId: string; subtypeId?: string; index: number } | null>(null)
+  const [editingSubtypeName, setEditingSubtypeName] = useState<{ billTypeId: string; subtypeId: string } | null>(null)
+  const [editingSubtypeNameValue, setEditingSubtypeNameValue] = useState('')
+  const [confirmDeleteSubtype, setConfirmDeleteSubtype] = useState<{ billTypeId: string; subtypeId: string } | null>(null)
+  const [editingTableId, setEditingTableId] = useState<string | null>(null)
+  const [editingTableIdValue, setEditingTableIdValue] = useState('')
+  const [tableIdError, setTableIdError] = useState<string | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -174,26 +180,38 @@ export function AdminPanel({ config, isExampleConfig, onSave, onImport, onClose 
     })
   }
 
-  const handleTableIdChange = (oldId: string, newId: string) => {
-    // Validate: max 2 characters, alphanumeric only
-    if (newId.length > 2 || !/^[A-Za-z0-9]*$/.test(newId)) {
-      return // Don't update if invalid
+  const handleTableIdSave = (oldId: string, newId: string) => {
+    // Validate: max 2 characters, alphanumeric only, not empty
+    const sanitized = newId.toUpperCase().trim()
+    if (sanitized.length === 0) {
+      setTableIdError('Il codice non può essere vuoto')
+      return false
+    }
+    if (sanitized.length > 2) {
+      setTableIdError('Max 2 caratteri alfanumerici')
+      return false
+    }
+    if (!/^[A-Z0-9]+$/.test(sanitized)) {
+      setTableIdError('Solo caratteri alfanumerici')
+      return false
     }
 
     // Check if new ID already exists (and is not the same as old)
-    const exists = draft.tables.some((t) => t.id === newId && t.id !== oldId)
+    const exists = draft.tables.some((t) => t.id === sanitized && t.id !== oldId)
     if (exists) {
-      return // Don't update if ID already exists
+      setTableIdError('Questo codice esiste già')
+      return false
     }
 
+    setTableIdError(null)
     setDraft((prev) => {
       // Update table ID
       const updatedTables = prev.tables.map((t) =>
         t.id === oldId
           ? {
               ...t,
-              id: newId || oldId, // Keep old if empty
-              name: `Tabella ${newId || oldId}`,
+              id: sanitized,
+              name: `Tabella ${sanitized}`,
             }
           : t,
       )
@@ -204,14 +222,14 @@ export function AdminPanel({ config, isExampleConfig, onSave, onImport, onClose 
           if (!rule) return rule
 
           if (rule.kind === 'single_table') {
-            return rule.tableId === oldId ? { ...rule, tableId: newId || oldId } : rule
+            return rule.tableId === oldId ? { ...rule, tableId: sanitized } : rule
           }
 
           if (rule.kind === 'weighted_tables') {
             return {
               ...rule,
               tables: rule.tables.map((wt) =>
-                wt.tableId === oldId ? { ...wt, tableId: newId || oldId } : wt,
+                wt.tableId === oldId ? { ...wt, tableId: sanitized } : wt,
               ),
             }
           }
@@ -241,6 +259,8 @@ export function AdminPanel({ config, isExampleConfig, onSave, onImport, onClose 
         billTypes: updatedBillTypes,
       }
     })
+    setEditingTableId(null)
+    return true
   }
 
   const handleTableValue = (tableId: string, condoId: string, value: number) => {
@@ -464,11 +484,12 @@ export function AdminPanel({ config, isExampleConfig, onSave, onImport, onClose 
         if (field === 'tableId') {
           tables[index] = { ...tables[index], tableId: value }
         } else {
-          // Validate weight: 0-1 with max 2 decimals
+          // Convert percentage input (0-100) to decimal (0-1) for storage
           const numValue = Number(value)
           let weight = 0
-          if (value !== '' && !isNaN(numValue) && numValue >= 0 && numValue <= 1) {
-            weight = Math.round(numValue * 100) / 100 // Round to 2 decimals
+          if (value !== '' && !isNaN(numValue) && numValue >= 0 && numValue <= 100) {
+            // Convert percentage to decimal and round to 2 decimals
+            weight = Math.round((numValue / 100) * 10000) / 10000 // Round to 4 decimals for precision, then to 2
           }
           tables[index] = { ...tables[index], weight }
         }
@@ -520,6 +541,50 @@ export function AdminPanel({ config, isExampleConfig, onSave, onImport, onClose 
     setOpenKebabMenu(null)
   }
 
+  // Calculate sum of percentages for a weighted_tables rule
+  const getWeightedTablesSum = (rule: DistributionRule | undefined): number => {
+    if (!rule || rule.kind !== 'weighted_tables') return 0
+    return rule.tables.reduce((sum, t) => sum + t.weight * 100, 0)
+  }
+
+  // Check if a weighted_tables rule has valid sum (100% ± 0.01)
+  const isWeightedTablesValid = (rule: DistributionRule | undefined): boolean => {
+    if (!rule || rule.kind !== 'weighted_tables') return true
+    const sum = getWeightedTablesSum(rule)
+    return Math.abs(sum - 100) <= 0.01
+  }
+
+  // Check if all weighted_tables rules in the config are valid
+  const areAllWeightedTablesValid = (): boolean => {
+    for (const billType of draft.billTypes) {
+      if (!isWeightedTablesValid(billType.rule)) return false
+      if (billType.subtypes) {
+        for (const subtype of billType.subtypes) {
+          if (!isWeightedTablesValid(subtype.rule)) return false
+        }
+      }
+    }
+    return true
+  }
+
+  // Normalize a weighted_tables rule to sum exactly 100%
+  const normalizeWeightedTables = (billTypeId: string, subtypeId?: string) => {
+    updateRule(
+      billTypeId,
+      (rule) => {
+        if (!rule || rule.kind !== 'weighted_tables') return { kind: 'weighted_tables', tables: [] }
+        const currentSum = rule.tables.reduce((sum, t) => sum + t.weight, 0)
+        if (currentSum === 0) return rule // Can't normalize if sum is 0
+        const normalizedTables = rule.tables.map((t) => ({
+          ...t,
+          weight: t.weight / currentSum, // Scale proportionally to sum to 1.0 (100%)
+        }))
+        return { ...rule, tables: normalizedTables }
+      },
+      subtypeId,
+    )
+  }
+
   const handleCustomPercent = (
     billTypeId: string,
     subtypeId: string | undefined,
@@ -547,6 +612,93 @@ export function AdminPanel({ config, isExampleConfig, onSave, onImport, onClose 
       },
       subtypeId,
     )
+  }
+
+  const handleSubtypeNameChange = (billTypeId: string, subtypeId: string, newName: string) => {
+    if (!newName.trim()) {
+      setEditingSubtypeName(null)
+      return
+    }
+    
+    // Check for duplicate names within the same bill type
+    const billType = draft.billTypes.find((bt) => bt.id === billTypeId)
+    if (billType?.subtypes) {
+      const duplicate = billType.subtypes.find(
+        (s) => s.id !== subtypeId && s.name.toLowerCase() === newName.trim().toLowerCase()
+      )
+      if (duplicate) {
+        alert('Un sottotipo con questo nome esiste già in questa tipologia.')
+        return
+      }
+    }
+
+    setDraft((prev) => ({
+      ...prev,
+      billTypes: prev.billTypes.map((bt) =>
+        bt.id === billTypeId
+          ? {
+              ...bt,
+              subtypes: bt.subtypes?.map((s) => (s.id === subtypeId ? { ...s, name: newName.trim() } : s)),
+            }
+          : bt,
+      ),
+    }))
+    setEditingSubtypeName(null)
+  }
+
+  const handleAddSubtype = (billTypeId: string) => {
+    const billType = draft.billTypes.find((bt) => bt.id === billTypeId)
+    if (!billType) return
+
+    const firstTableId = draft.tables[0]?.id ?? ''
+    const defaultRule: DistributionRule = {
+      kind: 'single_table',
+      tableId: firstTableId,
+      description: '',
+    }
+
+    const newSubtype: BillSubtype = {
+      id: `st-${makeId()}`,
+      name: 'Nuovo sottotipo',
+      rule: defaultRule,
+    }
+
+    setDraft((prev) => ({
+      ...prev,
+      billTypes: prev.billTypes.map((bt) =>
+        bt.id === billTypeId
+          ? {
+              ...bt,
+              subtypes: [...(bt.subtypes ?? []), newSubtype],
+            }
+          : bt,
+      ),
+    }))
+
+    // Start editing the new subtype name immediately
+    setEditingSubtypeName({ billTypeId, subtypeId: newSubtype.id })
+    setEditingSubtypeNameValue(newSubtype.name)
+  }
+
+  const handleRemoveSubtype = (billTypeId: string, subtypeId: string) => {
+    const billType = draft.billTypes.find((bt) => bt.id === billTypeId)
+    if (!billType?.subtypes || billType.subtypes.length <= 1) {
+      alert('Deve rimanere almeno un sottotipo.')
+      return
+    }
+
+    setDraft((prev) => ({
+      ...prev,
+      billTypes: prev.billTypes.map((bt) =>
+        bt.id === billTypeId
+          ? {
+              ...bt,
+              subtypes: bt.subtypes?.filter((s) => s.id !== subtypeId),
+            }
+          : bt,
+      ),
+    }))
+    setConfirmDeleteSubtype(null)
   }
 
   const handleDescription = (billTypeId: string, subtypeId: string | undefined, description: string) => {
@@ -580,6 +732,11 @@ export function AdminPanel({ config, isExampleConfig, onSave, onImport, onClose 
   }
 
   const handleSave = () => {
+    // Check if all weighted_tables rules have valid sums
+    if (!areAllWeightedTablesValid()) {
+      alert('Impossibile salvare: alcune regole "% su più tabelle" non sommano a 100%. Correggi le percentuali prima di salvare.')
+      return
+    }
     const tablesChanged = JSON.stringify(config.tables) !== JSON.stringify(draft.tables)
     if (tablesChanged) {
       if (!window.confirm('Confermi le modifiche alle tabelle millesimali?')) return
@@ -850,16 +1007,78 @@ export function AdminPanel({ config, isExampleConfig, onSave, onImport, onClose 
                       <div className="flex flex-wrap items-center gap-2 justify-between">
                         <div className="flex items-center gap-2 min-w-0 flex-1">
                           <label className="text-sm font-semibold text-slate-700 whitespace-nowrap">Tabella</label>
-                          <input
-                            type="text"
-                            value={table.id}
-                            onChange={(e) => handleTableIdChange(table.id, e.target.value.toUpperCase())}
-                            maxLength={2}
-                            pattern="[A-Za-z0-9]{1,2}"
-                            className="w-16 rounded-lg border border-slate-200 px-2 py-1.5 text-sm font-semibold text-center uppercase focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
-                            placeholder="ID"
-                            title="ID tabella (max 2 caratteri alfanumerici)"
-                          />
+                          {editingTableId === table.id ? (
+                            <div className="relative">
+                              <input
+                                type="text"
+                                value={editingTableIdValue}
+                                onChange={(e) => {
+                                  const val = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '')
+                                  if (val.length <= 2) {
+                                    setEditingTableIdValue(val)
+                                    setTableIdError(null)
+                                  }
+                                }}
+                                onFocus={(e) => {
+                                  e.target.select()
+                                }}
+                                onBlur={() => {
+                                  handleTableIdSave(table.id, editingTableIdValue)
+                                }}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault()
+                                    handleTableIdSave(table.id, editingTableIdValue)
+                                  } else if (e.key === 'Escape') {
+                                    setEditingTableId(null)
+                                    setEditingTableIdValue(table.id)
+                                    setTableIdError(null)
+                                  }
+                                }}
+                                autoFocus
+                                maxLength={2}
+                                className={`w-16 rounded-lg border px-2 py-1.5 text-sm font-semibold text-center uppercase focus:outline-none focus:ring-2 ${
+                                  tableIdError
+                                    ? 'border-red-300 focus:border-red-400 focus:ring-red-200'
+                                    : 'border-brand focus:border-brand focus:ring-brand/20'
+                                }`}
+                                placeholder="ID"
+                                aria-label="Modifica codice tabella"
+                              />
+                              {tableIdError && (
+                                <div className="absolute left-0 top-full mt-1 z-10 rounded-lg border border-red-200 bg-red-50 px-2 py-1 text-xs text-red-700 shadow-sm whitespace-nowrap">
+                                  {tableIdError}
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingTableId(table.id)
+                                setEditingTableIdValue(table.id)
+                                setTableIdError(null)
+                              }}
+                              className="w-16 rounded-lg border border-slate-200 px-2 py-1.5 text-sm font-semibold text-center uppercase hover:border-brand hover:bg-slate-50 transition-colors flex items-center justify-center gap-1 group"
+                              title="Clicca per modificare il codice"
+                              aria-label="Modifica codice tabella"
+                            >
+                              <span>{table.id}</span>
+                              <svg
+                                className="h-3 w-3 text-slate-400 group-hover:text-brand transition-colors"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                                strokeWidth={2}
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                                />
+                              </svg>
+                            </button>
+                          )}
                         </div>
                         {confirmDeleteTable === table.id ? (
                           <div className="flex flex-col gap-2 sm:flex-row sm:items-center w-full sm:w-auto">
@@ -1024,12 +1243,115 @@ export function AdminPanel({ config, isExampleConfig, onSave, onImport, onClose 
                     )
                     const subtypeId = bill.requiresSubtype ? (sub as BillSubtype).id : undefined
                     const subtypeName = bill.requiresSubtype ? (sub as BillSubtype).name : 'Regola'
+                    const isEditingName = editingSubtypeName?.billTypeId === bill.id && editingSubtypeName?.subtypeId === subtypeId
+                    const isConfirmingDelete = confirmDeleteSubtype?.billTypeId === bill.id && confirmDeleteSubtype?.subtypeId === subtypeId
 
                     return (
                       <div key={subtypeId ?? bill.id} className="mt-2 rounded-lg border border-slate-100 p-3 min-w-0 overflow-hidden">
                         <div className="mb-2 flex items-center gap-2 min-w-0">
-                          <p className="text-sm font-semibold text-slate-800 flex-shrink-0">{subtypeName}</p>
-                          <div className="relative flex-1 min-w-0 max-w-full overflow-hidden">
+                          {isEditingName ? (
+                            <input
+                              type="text"
+                              value={editingSubtypeNameValue}
+                              onChange={(e) => setEditingSubtypeNameValue(e.target.value)}
+                              onBlur={() => {
+                                if (editingSubtypeName) {
+                                  handleSubtypeNameChange(editingSubtypeName.billTypeId, editingSubtypeName.subtypeId, editingSubtypeNameValue)
+                                }
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault()
+                                  if (editingSubtypeName) {
+                                    handleSubtypeNameChange(editingSubtypeName.billTypeId, editingSubtypeName.subtypeId, editingSubtypeNameValue)
+                                  }
+                                } else if (e.key === 'Escape') {
+                                  setEditingSubtypeName(null)
+                                }
+                              }}
+                              autoFocus
+                              className="flex-1 min-w-[120px] rounded-lg border border-brand px-2 py-1 text-sm font-semibold text-slate-800 focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
+                            />
+                          ) : (
+                            <>
+                              {bill.requiresSubtype ? (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingSubtypeName({ billTypeId: bill.id, subtypeId: subtypeId! })
+                                    setEditingSubtypeNameValue(subtypeName)
+                                  }}
+                                  className="flex-1 min-w-0 flex items-center gap-1 group hover:text-brand transition-colors"
+                                  title="Clicca per modificare il nome"
+                                >
+                                  <span className="text-sm font-semibold text-slate-800 truncate text-ellipsis overflow-hidden whitespace-nowrap" title={subtypeName}>
+                                    {subtypeName}
+                                  </span>
+                                  <svg
+                                    className="h-3.5 w-3.5 text-slate-400 group-hover:text-brand transition-colors flex-shrink-0"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    stroke="currentColor"
+                                    strokeWidth={2}
+                                  >
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                                    />
+                                  </svg>
+                                </button>
+                              ) : (
+                                <p className="text-sm font-semibold text-slate-800 flex-1 min-w-0 truncate text-ellipsis overflow-hidden whitespace-nowrap" title={subtypeName}>
+                                  {subtypeName}
+                                </p>
+                              )}
+                            </>
+                          )}
+                          {isConfirmingDelete ? (
+                            <div className="ml-auto flex gap-1 flex-shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveSubtype(bill.id, subtypeId!)}
+                                className="rounded-lg border border-red-300 bg-red-50 px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-100 whitespace-nowrap"
+                              >
+                                Conferma
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setConfirmDeleteSubtype(null)}
+                                className="rounded-lg border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-slate-100 whitespace-nowrap"
+                              >
+                                Annulla
+                              </button>
+                            </div>
+                          ) : (
+                            bill.requiresSubtype && (
+                              <button
+                                type="button"
+                                onClick={() => setConfirmDeleteSubtype({ billTypeId: bill.id, subtypeId: subtypeId! })}
+                                className="ml-auto flex-shrink-0 rounded-lg border border-red-300 bg-red-50 px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-100 flex items-center gap-1 whitespace-nowrap"
+                                title="Elimina sottotipo"
+                              >
+                                <svg
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  className="h-3.5 w-3.5"
+                                  fill="none"
+                                  viewBox="0 0 24 24"
+                                  stroke="currentColor"
+                                  strokeWidth={2}
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                                  />
+                                </svg>
+                                Elimina
+                              </button>
+                            )
+                          )}
+                          <div className="relative flex-1 min-w-0 max-w-full overflow-hidden w-full sm:flex-1 sm:w-auto">
                             <select
                               value={rule?.kind ?? 'single_table'}
                               onChange={(e) =>
@@ -1110,22 +1432,48 @@ export function AdminPanel({ config, isExampleConfig, onSave, onImport, onClose 
                                       </svg>
                                     </div>
                                   </div>
-                                  <input
-                                    type="number"
-                                    inputMode="decimal"
-                                    step="0.01"
-                                    min="0"
-                                    max="1"
-                                    value={row.weight === 0 ? '' : row.weight}
-                                    onChange={(e) => {
-                                      const val = e.target.value
-                                      if (val === '' || (Number(val) >= 0 && Number(val) <= 1)) {
-                                        handleWeightedRow(bill.id, subtypeId, idx, 'weight', val)
+                                  <div className="relative flex-shrink-0 w-20 sm:w-24">
+                                    <input
+                                      type="number"
+                                      inputMode="decimal"
+                                      step="0.01"
+                                      min="0"
+                                      max="100"
+                                      value={
+                                        (() => {
+                                          const percent = row.weight * 100
+                                          if (percent === 0) return '0'
+                                          // Format: remove trailing zeros, keep 2 decimals max
+                                          const formatted = percent.toFixed(2)
+                                          return formatted.replace(/\.?0+$/, '')
+                                        })()
                                       }
-                                    }}
-                                    className="w-16 sm:w-20 rounded-lg border border-slate-200 px-1.5 py-1 text-right text-sm font-medium text-slate-900 focus:border-brand focus:outline-none flex-shrink-0"
-                                    placeholder="0.00"
-                                  />
+                                      onChange={(e) => {
+                                        const val = e.target.value
+                                        if (val === '' || (Number(val) >= 0 && Number(val) <= 100)) {
+                                          handleWeightedRow(bill.id, subtypeId, idx, 'weight', val)
+                                        }
+                                      }}
+                                      onBlur={(e) => {
+                                        // Format on blur: ensure proper display format
+                                        const val = e.target.value
+                                        if (val === '') {
+                                          // If empty, set to 0
+                                          handleWeightedRow(bill.id, subtypeId, idx, 'weight', '0')
+                                        } else if (!isNaN(Number(val))) {
+                                          const num = Number(val)
+                                          // Format: whole numbers as-is, decimals with max 2 places, remove trailing zeros
+                                          const formatted = num % 1 === 0 ? num.toString() : num.toFixed(2).replace(/\.?0+$/, '')
+                                          if (formatted !== val) {
+                                            handleWeightedRow(bill.id, subtypeId, idx, 'weight', formatted)
+                                          }
+                                        }
+                                      }}
+                                      className="w-full rounded-lg border border-slate-200 px-1.5 pr-6 py-1 text-right text-sm font-medium text-slate-900 focus:border-brand focus:outline-none"
+                                      placeholder="0"
+                                    />
+                                    <span className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-sm text-slate-500">%</span>
+                                  </div>
                                   <div className="relative flex-shrink-0" data-kebab-menu>
                                     <button
                                       type="button"
@@ -1159,13 +1507,44 @@ export function AdminPanel({ config, isExampleConfig, onSave, onImport, onClose 
                                 </div>
                               )
                             })}
-                            <button
-                              type="button"
-                              onClick={() => addWeightedRow(bill.id, subtypeId)}
-                              className="text-sm font-semibold text-brand"
-                            >
-                              + Aggiungi tabella
-                            </button>
+                            <div className="flex items-center justify-between gap-2 flex-wrap">
+                              <button
+                                type="button"
+                                onClick={() => addWeightedRow(bill.id, subtypeId)}
+                                className="text-sm font-semibold text-brand"
+                              >
+                                + Aggiungi tabella
+                              </button>
+                              {(() => {
+                                const sum = getWeightedTablesSum(rule)
+                                const isValid = isWeightedTablesValid(rule)
+                                return (
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span
+                                      className={`text-xs font-medium ${
+                                        isValid ? 'text-green-600' : 'text-red-600'
+                                      }`}
+                                    >
+                                      {isValid ? (
+                                        <>Somma: {sum.toFixed(2)}% ✓ OK</>
+                                      ) : (
+                                        <>Somma: {sum.toFixed(2)}% – deve essere 100%. Correggi le percentuali.</>
+                                      )}
+                                    </span>
+                                    {!isValid && sum > 0 && (
+                                      <button
+                                        type="button"
+                                        onClick={() => normalizeWeightedTables(bill.id, subtypeId)}
+                                        className="text-xs font-medium text-slate-600 hover:text-brand underline"
+                                        title="Normalizza le percentuali per sommare esattamente 100%"
+                                      >
+                                        Normalizza
+                                      </button>
+                                    )}
+                                  </div>
+                                )
+                              })()}
+                            </div>
                           </div>
                         )}
 
@@ -1225,6 +1604,15 @@ export function AdminPanel({ config, isExampleConfig, onSave, onImport, onClose 
                       </div>
                     )
                   },
+                )}
+                {bill.requiresSubtype && (
+                  <button
+                    type="button"
+                    onClick={() => handleAddSubtype(bill.id)}
+                    className="mt-2 w-full rounded-lg border border-dashed border-brand px-3 py-2 text-sm font-semibold text-brand hover:bg-brand/5 transition-colors"
+                  >
+                    + Aggiungi sottotipo
+                  </button>
                 )}
               </div>
             ))}
@@ -1380,7 +1768,8 @@ export function AdminPanel({ config, isExampleConfig, onSave, onImport, onClose 
             <button
               type="button"
               onClick={handleSave}
-              className="rounded-xl bg-brand px-4 py-2 text-sm font-semibold text-white shadow hover:bg-brand/90 whitespace-nowrap"
+              disabled={!areAllWeightedTablesValid()}
+              className="rounded-xl bg-brand px-4 py-2 text-sm font-semibold text-white shadow hover:bg-brand/90 whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Salva configurazione
             </button>
